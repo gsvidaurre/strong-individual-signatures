@@ -4,7 +4,7 @@
 
 <img src="https://raw.githubusercontent.com/gsvidaurre/strong-individual-signatures/master/img/R_logo.png" width="50px"/>
 
-Supplementary code is available in rendered HTML files on <a href='https://gsvidaurre.github.io/strong-individual-signatures/' target='_blank'>Github Pages </a>, which contain some figures. The associated RMarkdown files are also provided in this repository.
+Supplementary code is available in rendered HTML files on <a href="https://gsvidaurre.github.io/strong-individual-signatures/" target="_blank">Github Pages</a>, which contain some figures. The associated RMarkdown files are also provided in this repository.
 
 Analyses can be reproduced using data deposited on Dryad by authors:
 
