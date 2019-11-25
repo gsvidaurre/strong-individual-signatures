@@ -7,8 +7,7 @@
 <meta charset="utf-8" />
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 <meta name="generator" content="pandoc" />
-
-
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 
 
 <title></title>
@@ -80,10 +79,13 @@ h6 {
   </div>
 
 <style type="text/css">
-.back_link {
+.back_btn {
   position: fixed;
   right: 3rem;
   top: 3rem;
+  z-index: calc(99 * 999) !important;
+}
+.back_link {
   border: 1px solid #337ab7;
   border-radius: 5px;
   padding: 0.5rem 2rem;
@@ -94,6 +96,26 @@ h6 {
   text-decoration: none;
   background-color: #337ab7;
   color: #fff !important;
+}
+@media only screen and (max-width: 768px) {
+  .back_btn {
+    right: 1rem;
+    top: auto;
+    bottom: 1rem;
+  }
+  .back_link {
+    background-color: #337ab7;
+    color: #fff !important;
+    font-size: 12px;
+    border-color: #fff;
+  }
+  #supplementary-table-3, #supplementary-table-2, #supplementary-table-1 ,#supplementary-table-4, #supplementary-table-5 {
+    overflow-x: auto !important;
+  }
+  p {
+    word-break: break-all !important;
+    max-width: 100% !important;
+  }
 }
 .main-container {
   max-width: 940px;
