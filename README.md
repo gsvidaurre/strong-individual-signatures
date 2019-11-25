@@ -1,7 +1,8 @@
 # Individual signatures outweigh social group membership in contact calls of a communally nesting parrot
 ### Behavioral Ecology, 2019
+### Supplementary Code
 
-<img src="https://raw.githubusercontent.com/gsvidaurre/strong-individual-signatures/master/img/R_logo.png" width="50px"/> Supplementary Code
+<img src="https://raw.githubusercontent.com/gsvidaurre/strong-individual-signatures/master/img/R_logo.png" width="50px"/>
 
 Supplementary code is available in rendered HTML files, which contain some figures. RMarkdown files with code are also provided in this repository.
 
