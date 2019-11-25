@@ -80,13 +80,20 @@ h6 {
   </div>
 
 <style type="text/css">
-.back_btn {
+.back_link {
   position: fixed;
   right: 3rem;
   top: 3rem;
-  border: 1px solid blue;
+  border: 1px solid #337ab7;
   border-radius: 5px;
-  padding: 1rem 2rem;
+  padding: 0.5rem 2rem;
+  z-index: 999;
+  background-color: transparent;
+}
+.back_link:hover {
+  text-decoration: none;
+  background-color: #337ab7;
+  color: #fff !important;
 }
 .main-container {
   max-width: 940px;
