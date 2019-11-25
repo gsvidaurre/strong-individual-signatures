@@ -75,7 +75,9 @@ h6 {
 </head>
 
 <body>
-
+<div class="back_btn">
+  <a href="index.html" class="back_link">Go Back</a>
+</div>
 <style type="text/css">
 .main-container {
   max-width: 940px;
@@ -314,7 +316,7 @@ rm(list = ls())
 # X &lt;- c(&quot;pbapply&quot;, &quot;ggplot2&quot;, &quot;data.table&quot;, &quot;parallel&quot;)
 
 # is_installed &lt;- function(p) is.element(p, installed.packages()[,1])
-# 
+#
 # lapply(1:length(X), function(x){
 #   if(!is_installed(X[x])){
 #     install.packages(X[x], repos = &quot;http://lib.stat.cmu.edu/R/CRAN&quot;)
@@ -390,8 +392,8 @@ fselst_snr &lt;- sig2noise(X = fselst, mar = 0.05, type = 1, bp = c(0.5, 9), wl 
 # remove calls with SNR &lt; 7
 length(which(fselst_snr$SNR &lt; 7)) # only 2 calls will be removed
 fselst_snr &lt;- fselst_snr[-which(fselst_snr$SNR &lt; 7), ]
-# str(fselst_snr) 
-# nrow(fselst_snr) 
+# str(fselst_snr)
+# nrow(fselst_snr)
 
 # remove any calls that were flagged as low quality in visual inspections
 fselst_snr &lt;- fselst_snr[fselst_snr$Visual_quality_score != &quot;L&quot;, ]
@@ -404,7 +406,7 @@ write.csv(fselst_snr, file.path(path, &quot;indiv_scale_calls_preprocessed.csv&q
 <pre class="r"><code>fselst_snr &lt;- read.csv(file.path(path, &quot;indiv_scale_calls_preprocessed.csv&quot;), header = TRUE)
 
 cores &lt;- parallel::detectCores() - 2
-indiv_sels_tbl &lt;- selection_table(X = fselst_snr, whole.recs = FALSE, extended = TRUE, confirm.extended = TRUE, mar = 0.1, parallel = cores, path = path) 
+indiv_sels_tbl &lt;- selection_table(X = fselst_snr, whole.recs = FALSE, extended = TRUE, confirm.extended = TRUE, mar = 0.1, parallel = cores, path = path)
 
 # save the extended selection table as an RDS object
 # this object will be provided in Supplementary Material as a means to share the focal individual calls and associated selection table with metadata
@@ -465,7 +467,7 @@ ccs &lt;- dplyr::full_join(ccs, cc_sels, by = &quot;uniq_nm&quot;)
 
 write.csv(ccs, file.path(path, &quot;higher_social_scales_calls_preprocessed.csv&quot;), row.names = FALSE)</code></pre>
 <p>We added geographic coordinates and additional metadata columns to the site-level metadata.</p>
-<pre class="r"><code># read in updated metadata 
+<pre class="r"><code># read in updated metadata
 ccs &lt;- read.csv(file.path(path, &quot;higher_social_scales_calls_preprocessed.csv&quot;), header = TRUE)
 
 # read in geographic coordinates by site
@@ -512,7 +514,7 @@ catalog2pdf(keep.img = FALSE, by.img.suffix = TRUE, path = path)</code></pre>
 ccs$spec.title &lt;- &quot;&quot;
 # str(ccs)
 
-# manually change the name of seltailor_output.csv to site-level_calls_preprocessed.csv 
+# manually change the name of seltailor_output.csv to site-level_calls_preprocessed.csv
 # seltailor retains all other metadata, with the tailored start and end coordinates and a column indicating whether or not the signal coordinates were tailored
 seltailor(X = ccs, flim = c(0, 9), mar = 0.2, osci = TRUE, title = &quot;spec.title&quot;, wn = &quot;hanning&quot;, wl = 378, ovlp = 90, collev = seq(-53, 0, 1), auto_next = TRUE, path = path)</code></pre>
 <p>We pre-processed site-level calls for sound analysis.</p>
@@ -535,10 +537,10 @@ nrow(ccs)</code></pre>
 <pre class="r"><code>length(table(ri_sub$General_site)[which(table(ri_sub$General_site) != 0)])</code></pre>
 <pre><code>## [1] 11</code></pre>
 <pre class="r"><code>table(ri_sub$General_site)[which(table(ri_sub$General_site) != 0)]</code></pre>
-<pre><code>## 
-##    ARAZ    BAGU    BCAR    GOLF INES-04    OJOS    PAVO    PEIX PFER-01 
-##       2       1       6       1       1       1       1       1       1 
-## PFER-03    VALI 
+<pre><code>##
+##    ARAZ    BAGU    BCAR    GOLF INES-04    OJOS    PAVO    PEIX PFER-01
+##       2       1       6       1       1       1       1       1       1
+## PFER-03    VALI
 ##       2       2</code></pre>
 <p>Over these sites, what was the mean and range number of potential repeated individual calls?</p>
 <pre class="r"><code>mean(table(ri_sub$General_site)[which(table(ri_sub$General_site) != 0)])</code></pre>
@@ -561,21 +563,21 @@ nrow(ccs)</code></pre>
 <pre class="r"><code>nrow(ccs)</code></pre>
 <pre><code>## [1] 616</code></pre>
 <pre class="r"><code>table(ccs$General_site)</code></pre>
-<pre><code>## 
-##    1145    ARAP    ARAZ    BAGU    BCAR    CEME    CHAC    CISN    ECIL 
-##      13      12      15      20      13       6      12      28      17 
-##    ELTE    EMBR    FAGR    GOLF    HIPE    INBR INES-01 INES-02 INES-03 
-##      23      22       9      22       5      19      12       2      15 
-## INES-04 INES-05 INES-06 INES-07 INES-08    KIYU    LACA    LENA    OJOS 
-##       9       6       6       9      27       8       3      19      23 
-##    PAVO    PEIX PFER-01 PFER-02 PFER-03    PIED    PLVE    PROO    QUEB 
-##      25      19      34       4      19      21      11      12      16 
-## RIAC-01 RIAC-02    ROSA    SAUC    SEMI    VALI 
+<pre><code>##
+##    1145    ARAP    ARAZ    BAGU    BCAR    CEME    CHAC    CISN    ECIL
+##      13      12      15      20      13       6      12      28      17
+##    ELTE    EMBR    FAGR    GOLF    HIPE    INBR INES-01 INES-02 INES-03
+##      23      22       9      22       5      19      12       2      15
+## INES-04 INES-05 INES-06 INES-07 INES-08    KIYU    LACA    LENA    OJOS
+##       9       6       6       9      27       8       3      19      23
+##    PAVO    PEIX PFER-01 PFER-02 PFER-03    PIED    PLVE    PROO    QUEB
+##      25      19      34       4      19      21      11      12      16
+## RIAC-01 RIAC-02    ROSA    SAUC    SEMI    VALI
 ##      17       8      15       6      11      23</code></pre>
 <p>Sites with &lt; 5 calls?</p>
 <pre class="r"><code>table(ccs$General_site)[which(table(ccs$General_site) &lt; 5)]</code></pre>
-<pre><code>## 
-## INES-02    LACA PFER-02 
+<pre><code>##
+## INES-02    LACA PFER-02
 ##       2       3       4</code></pre>
 <p>We removed sites with &lt; 5 calls (INES-02, LACA, PFER-02).</p>
 <pre class="r"><code>ccs &lt;- ccs[-grep(&quot;INES-02|LACA|PFER-02&quot;, ccs$General_site), ]
@@ -606,14 +608,14 @@ df_SNR2 &lt;- sig2noise(X = ccs[grepl(&quot;^N$&quot;, ccs$SNR_mar_works) &amp; 
 nrow(df_SNR2)
 
 # SNR improved, as expected
-df_SNR$SNR[grepl(&quot;^N$&quot;, ccs$SNR_mar_works) &amp; ccs$SNR_mar_overlap_section == &quot;E&quot;] 
+df_SNR$SNR[grepl(&quot;^N$&quot;, ccs$SNR_mar_works) &amp; ccs$SNR_mar_overlap_section == &quot;E&quot;]
 df_SNR2$SNR
 
 # we replaced the SNR calculation for those calls
 df_SNR$SNR[grepl(&quot;^N$&quot;, ccs$SNR_mar_works) &amp; ccs$SNR_mar_overlap_section == &quot;E&quot;] &lt;- df_SNR2$SNR
 
 # for the 2 remaining calls for which the SNR margin of 0.01s did not work, and which were closely preceded by a neighboring call, we used the SNR of the preceding call. sig2noise does not currently have the option to calculate SNR after a given signal, and the following solution ensured that the assigned SNR originated from the local call context.
-df_SNR$SNR[grep(&quot;2017_07_28_ECIL-02_1182.WAV-3&quot;, ccs$uniq_nm)] &lt;- df_SNR$SNR[grep(&quot;2017_07_28_ECIL-02_1182.WAV-2&quot;, ccs$uniq_nm)] 
+df_SNR$SNR[grep(&quot;2017_07_28_ECIL-02_1182.WAV-3&quot;, ccs$uniq_nm)] &lt;- df_SNR$SNR[grep(&quot;2017_07_28_ECIL-02_1182.WAV-2&quot;, ccs$uniq_nm)]
 
 df_SNR$SNR[grep(&quot;2017_09_13_ELTE_1399.WAV-8&quot;, ccs$uniq_nm)] &lt;- df_SNR$SNR[grep(&quot;2017_09_13_ELTE_1399.WAV-7&quot;, ccs$uniq_nm)] </code></pre>
 <p>We removed calls with SNR &lt; 7, the same quality filter as performed on the focal individual calls.</p>
@@ -621,7 +623,7 @@ df_SNR$SNR[grep(&quot;2017_09_13_ELTE_1399.WAV-8&quot;, ccs$uniq_nm)] &lt;- df_S
 str(ccs)
 
 # how many calls with SNR &lt; 7 and how spread out across sites?
-nrow(df_SNR[df_SNR$SNR &lt; 7, ]) # 2 calls with SNR &lt; 7 
+nrow(df_SNR[df_SNR$SNR &lt; 7, ]) # 2 calls with SNR &lt; 7
 unique(ccs$General_site[which(df_SNR$SNR &lt; 7)]) # at FAGR only
 
 ccs &lt;- ccs[ccs$SNR &gt;= 7, ]
@@ -633,7 +635,7 @@ write.csv(ccs, file.path(path, &quot;higher_social_scales_calls_preprocessed_fin
 str(ccs)
 
 cores &lt;- parallel::detectCores() - 2
-hss_sels_tbl &lt;- selection_table(X = ccs, whole.recs = FALSE, extended = TRUE, confirm.extended = TRUE, mar = 0.1, parallel = cores, path = path) 
+hss_sels_tbl &lt;- selection_table(X = ccs, whole.recs = FALSE, extended = TRUE, confirm.extended = TRUE, mar = 0.1, parallel = cores, path = path)
 
 # write out extended selection table as an RDS object
 saveRDS(hss_sels_tbl, file.path(path, &quot;higher_social_scales_extended_seltable.RDS&quot;))</code></pre>
@@ -648,8 +650,8 @@ saveRDS(hss_sels_tbl, file.path(path, &quot;higher_social_scales_extended_seltab
 <pre><code>## [1] 97</code></pre>
 <p>Calls per repeatedly sampled individual.</p>
 <pre class="r"><code>table(fselst_snr$indiv)</code></pre>
-<pre><code>## 
-## AAT RAW UM1 UM2 UM3 UM4 UM5 ZW8 
+<pre><code>##
+## AAT RAW UM1 UM2 UM3 UM4 UM5 ZW8
 ##  12   4  25  23   5  13   7   8</code></pre>
 <p>Mean number of calls per individual.</p>
 <pre class="r"><code>mean(table(fselst_snr$indiv))</code></pre>
@@ -659,7 +661,7 @@ saveRDS(hss_sels_tbl, file.path(path, &quot;higher_social_scales_extended_seltab
 <pre><code>## [1]  4 25</code></pre>
 <p>Calls by repeatedly sampled individuals and sites.</p>
 <pre class="r"><code>table(fselst_snr$indiv, fselst_snr$site)</code></pre>
-<pre><code>##      
+<pre><code>##
 ##       1145 CHAC EMBR
 ##   AAT   12    0    0
 ##   RAW    0    0    4
@@ -679,10 +681,10 @@ saveRDS(hss_sels_tbl, file.path(path, &quot;higher_social_scales_extended_seltab
 <pre class="r"><code>sites &lt;- as.character(unique(ccs$General_site))
 
 dates &lt;- sapply(1:length(sites), function(x){
-  
+
   tmp &lt;- ccs[grep(sites[x], ccs$General_site), ]
   unique(paste(tmp$Day, tmp$Month, sep = &quot;-&quot;))
-  
+
 })
 
 data.frame(dates, sites)</code></pre>
@@ -694,15 +696,15 @@ length(gid)</code></pre>
 <p>We collected information about all groups of birds flying together (pairs and flocks) in the data set for summary statistics.</p>
 <pre class="r"><code># filter the site-level data by all groups and generate a data frame that can be easily parsed for summary stats
 gid_size &lt;- lapply(1:length(gid), function(x){
-  
+
   pat &lt;- paste(&quot;^&quot;, gid[x], &quot;$&quot;, sep = &quot;&quot;)
-  
+
   st &lt;- unique(ccs$General_site[grep(pat, ccs$Overall_group_ID)])
   gi &lt;- unique(ccs$Flock_ID[grep(pat, ccs$Overall_group_ID)])
   pid &lt;- unique(ccs$Pair_ID[grep(pat, ccs$Overall_group_ID)])
   gs &lt;- unique(ccs$Group_size[grep(pat, ccs$Overall_group_ID)])
   cn &lt;- length(ccs$Group_size[grep(pat, ccs$Overall_group_ID)])
-  
+
   return(data.frame(site = st, overall_group_id = gid[x], flock_ID = gi, pair_ID = pid, group_size = gs, call_num = cn))
 })
 gid_size &lt;- data.table::rbindlist(gid_size)
@@ -734,12 +736,12 @@ saveRDS(pairs$pair_ID, file.path(path, &quot;pair_IDs.RDS&quot;))</code></pre>
 <pre><code>## [1] 21</code></pre>
 <p>How many pairs by site?</p>
 <pre class="r"><code>table(pairs$site)</code></pre>
-<pre><code>## 
-##    1145    ARAP    ARAZ    CISN    ECIL    ELTE    EMBR    INBR INES-01 
-##       1       1       2       4       1       5       1       3       2 
-## INES-03 INES-04 INES-08    LENA    OJOS    PAVO    PEIX PFER-01    PIED 
-##       3       2       4       1       1       1       1       2       1 
-## RIAC-01    ROSA    SAUC 
+<pre><code>##
+##    1145    ARAP    ARAZ    CISN    ECIL    ELTE    EMBR    INBR INES-01
+##       1       1       2       4       1       5       1       3       2
+## INES-03 INES-04 INES-08    LENA    OJOS    PAVO    PEIX PFER-01    PIED
+##       3       2       4       1       1       1       1       2       1
+## RIAC-01    ROSA    SAUC
 ##       3       3       2</code></pre>
 <p>Mean and range of pairs across sites?</p>
 <pre class="r"><code>range(table(pairs$site)) </code></pre>
@@ -750,10 +752,10 @@ saveRDS(pairs$pair_ID, file.path(path, &quot;pair_IDs.RDS&quot;))</code></pre>
 <pre class="r"><code>length(table(pairs$site)[which(table(pairs$site) &gt; 1)])</code></pre>
 <pre><code>## [1] 12</code></pre>
 <pre class="r"><code>table(pairs$site)[which(table(pairs$site) &gt; 1)]</code></pre>
-<pre><code>## 
-##    ARAZ    CISN    ELTE    INBR INES-01 INES-03 INES-04 INES-08 PFER-01 
-##       2       4       5       3       2       3       2       4       2 
-## RIAC-01    ROSA    SAUC 
+<pre><code>##
+##    ARAZ    CISN    ELTE    INBR INES-01 INES-03 INES-04 INES-08 PFER-01
+##       2       4       5       3       2       3       2       4       2
+## RIAC-01    ROSA    SAUC
 ##       3       3       2</code></pre>
 </div>
 <div id="flock" class="section level2">
@@ -783,12 +785,12 @@ saveRDS(flocks$flock_ID, file.path(path, &quot;flock_IDs.RDS&quot;))</code></pre
 <pre><code>## [1] 22</code></pre>
 <p>How many flocks by site?</p>
 <pre class="r"><code>table(flocks$site)</code></pre>
-<pre><code>## 
-##    ARAP    ARAZ    CHAC    CISN    ECIL    ELTE    FAGR    HIPE    INBR 
-##       2       2       1       1       2       2       1       1       1 
-## INES-03 INES-05 INES-06 INES-07 INES-08    KIYU    OJOS    PAVO    PEIX 
-##       1       1       1       1       1       1       1       2       1 
-##    PIED    QUEB RIAC-02    ROSA 
+<pre><code>##
+##    ARAP    ARAZ    CHAC    CISN    ECIL    ELTE    FAGR    HIPE    INBR
+##       2       2       1       1       2       2       1       1       1
+## INES-03 INES-05 INES-06 INES-07 INES-08    KIYU    OJOS    PAVO    PEIX
+##       1       1       1       1       1       1       1       2       1
+##    PIED    QUEB RIAC-02    ROSA
 ##       2       1       2       1</code></pre>
 <p>Mean and range of flocks across sites?</p>
 <pre class="r"><code>range(table(flocks$site)) </code></pre>
@@ -799,8 +801,8 @@ saveRDS(flocks$flock_ID, file.path(path, &quot;flock_IDs.RDS&quot;))</code></pre
 <pre class="r"><code>length(table(flocks$site)[which(table(flocks$site) &gt; 1)])</code></pre>
 <pre><code>## [1] 7</code></pre>
 <pre class="r"><code>table(flocks$site)[which(table(flocks$site) &gt; 1)]</code></pre>
-<pre><code>## 
-##    ARAP    ARAZ    ECIL    ELTE    PAVO    PIED RIAC-02 
+<pre><code>##
+##    ARAP    ARAZ    ECIL    ELTE    PAVO    PIED RIAC-02
 ##       2       2       2       2       2       2       2</code></pre>
 </div>
 <div id="site" class="section level2">
@@ -813,16 +815,16 @@ saveRDS(flocks$flock_ID, file.path(path, &quot;flock_IDs.RDS&quot;))</code></pre
 <pre><code>## [1] 39</code></pre>
 <p>How many calls by site?</p>
 <pre class="r"><code>table(ccs$General_site)</code></pre>
-<pre><code>## 
-##    1145    ARAP    ARAZ    BAGU    BCAR    CEME    CHAC    CISN    ECIL 
-##      13      12      15      20      13       6      12      28      17 
-##    ELTE    EMBR    FAGR    GOLF    HIPE    INBR INES-01 INES-03 INES-04 
-##      23      22       7      22       5      19      12      15       9 
-## INES-05 INES-06 INES-07 INES-08    KIYU    LENA    OJOS    PAVO    PEIX 
-##       6       6       9      27       8      19      23      25      19 
-## PFER-01 PFER-03    PIED    PLVE    PROO    QUEB RIAC-01 RIAC-02    ROSA 
-##      34      19      21      11      12      16      17       8      15 
-##    SAUC    SEMI    VALI 
+<pre><code>##
+##    1145    ARAP    ARAZ    BAGU    BCAR    CEME    CHAC    CISN    ECIL
+##      13      12      15      20      13       6      12      28      17
+##    ELTE    EMBR    FAGR    GOLF    HIPE    INBR INES-01 INES-03 INES-04
+##      23      22       7      22       5      19      12      15       9
+## INES-05 INES-06 INES-07 INES-08    KIYU    LENA    OJOS    PAVO    PEIX
+##       6       6       9      27       8      19      23      25      19
+## PFER-01 PFER-03    PIED    PLVE    PROO    QUEB RIAC-01 RIAC-02    ROSA
+##      34      19      21      11      12      16      17       8      15
+##    SAUC    SEMI    VALI
 ##       6      11      23</code></pre>
 <p>Mean and range of calls by site?</p>
 <pre class="r"><code>mean(table(ccs$General_site))</code></pre>
@@ -831,10 +833,10 @@ saveRDS(flocks$flock_ID, file.path(path, &quot;flock_IDs.RDS&quot;))</code></pre
 <pre><code>## [1]  5 34</code></pre>
 <p>How many calls by department? Uruguay is sub-divided into 19 departments, and we sampled across 7 departments (representaive of a regional scale for matrix regression with geographic distance, see Supplementary Methods 3).</p>
 <pre class="r"><code>table(ccs$dept)</code></pre>
-<pre><code>## 
-##  Canelones    Colonia  Maldonado Montevideo      Rocha      Salto 
-##         19        275         89         99         46         12 
-##   San Jose 
+<pre><code>##
+##  Canelones    Colonia  Maldonado Montevideo      Rocha      Salto
+##         19        275         89         99         46         12
+##   San Jose
 ##         65</code></pre>
 <p>Mean and range SNR across calls?</p>
 <pre class="r"><code>mean(ccs$SNR)</code></pre>
@@ -856,10 +858,10 @@ nrow(Colonia)</code></pre>
 <pre><code>## [1] 18</code></pre>
 <p>How many calls by site?</p>
 <pre class="r"><code>table(Colonia$General_site)</code></pre>
-<pre><code>## 
-##    1145    CHAC    EMBR INES-01 INES-03 INES-04 INES-05 INES-06 INES-07 
-##      13      12      22      12      15       9       6       6       9 
-## INES-08    LENA PFER-01 PFER-03    PIED RIAC-01 RIAC-02    ROSA    SEMI 
+<pre><code>##
+##    1145    CHAC    EMBR INES-01 INES-03 INES-04 INES-05 INES-06 INES-07
+##      13      12      22      12      15       9       6       6       9
+## INES-08    LENA PFER-01 PFER-03    PIED RIAC-01 RIAC-02    ROSA    SEMI
 ##      27      19      34      19      21      17       8      15      11</code></pre>
 <p>Mean and range of calls by site?</p>
 <pre class="r"><code>mean(table(Colonia$General_site))</code></pre>

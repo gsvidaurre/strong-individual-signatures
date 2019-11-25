@@ -75,6 +75,9 @@ h6 {
 </head>
 
 <body>
+  <div class="back_btn">
+    <a href="index.html" class="back_link">Go Back</a>
+  </div>
 
 <style type="text/css">
 .main-container {
@@ -303,11 +306,11 @@ X &lt;- c(&quot;tidyverse&quot;, &quot;vegan&quot;, &quot;pbapply&quot;, &quot;d
 invisible(lapply(X, library, character.only = TRUE))
 
 theme_AcousticSpace &lt;- function(){
-  theme(panel.background = element_rect(fill = &quot;white&quot;), plot.background = element_rect(fill = &quot;white&quot;), 
-        panel.grid.major = element_line(size = 1, colour = &quot;white&quot;), 
-        panel.grid.minor = element_line(size = 0.75, colour = &quot;white&quot;), 
-        axis.line = element_line(size = 0.45, colour = &quot;black&quot;), 
-        axis.title = element_text(size = 14), 
+  theme(panel.background = element_rect(fill = &quot;white&quot;), plot.background = element_rect(fill = &quot;white&quot;),
+        panel.grid.major = element_line(size = 1, colour = &quot;white&quot;),
+        panel.grid.minor = element_line(size = 0.75, colour = &quot;white&quot;),
+        axis.line = element_line(size = 0.45, colour = &quot;black&quot;),
+        axis.title = element_text(size = 14),
         axis.text = element_text(size = 12))
 }</code></pre>
 <p>Set directory paths for analysis.</p>
@@ -335,22 +338,22 @@ length(csvs)</code></pre>
 observs &lt;- 1:length(csvs)
 
 classif_accur &lt;- invisible(unlist(pblapply(observs, function(i){
-  
+
   tmp &lt;- t(csvs[[i]][grep(&quot;Individual&quot;, csvs[[i]]$social_scale), grep(&quot;class_&quot;, names(csvs[[i]]))])
   tmp &lt;- data.frame(class = row.names(tmp), spectros = tmp[, 1])
 
   # iterate over classes to assign an individual ID to each class
   class_IDs &lt;- unlist(lapply(1:nrow(tmp), function(x){
-    
+
     # obtain calls for the given class
     calls &lt;- as.character(tmp$spectros[x])
     calls &lt;- strsplit(calls, split = &quot;;&quot;)[[1]]
-    
+
     # obtain individual IDs from the spectrogram image names
     indivs &lt;- sapply(1:length(calls), function(z){
-      strsplit(strsplit(calls[z], split = &quot;INDIV-&quot;)[[1]][2], split = &quot;_&quot;)[[1]][1] 
+      strsplit(strsplit(calls[z], split = &quot;INDIV-&quot;)[[1]][2], split = &quot;_&quot;)[[1]][1]
     })
-    
+
     if(all(!is.na(indivs))){
       # find the individual with the most spectrograms assiged to this class
     # this individual ID will become assigned to the given class to facilitate calculating classification accuracy
@@ -360,57 +363,57 @@ classif_accur &lt;- invisible(unlist(pblapply(observs, function(i){
     } else {
       class_ID &lt;- NA
     }
-    
+
     return(class_ID)
-    
+
   }))
-  
-  
+
+
   # if each class could be assigned a unique individual ID
   if(all(!is.na(class_IDs)) &amp; !any(duplicated(class_IDs))){
-    
+
     tmp_class_IDs &lt;- class_IDs
-   
+
   # if some classes were left empty
   } else if(any(is.na(class_IDs))){
-    
+
     tmp_class_IDs &lt;- class_IDs[!is.na(class_IDs)]
-  
+
   # if some classes were evenly assigned to different individuals
   } else if(any(duplicated(class_IDs)) &amp; all(!is.na(class_IDs))){
-    
+
     tmp_class_IDs &lt;- class_IDs[!duplicated(class_IDs)]
-    
+
   }
-  
+
    wrong &lt;- unlist(lapply(1:nrow(tmp), function(x){
-      
+
       # obtain calls for the given class
       calls &lt;- as.character(tmp$spectros[x])
       calls &lt;- strsplit(calls, split = &quot;;&quot;)[[1]]
-    
+
       # obtain individual IDs from the spectrogram image names
       indivs &lt;- sapply(1:length(calls), function(z){
-       strsplit(strsplit(calls[z], split = &quot;INDIV-&quot;)[[1]][2], split = &quot;_&quot;)[[1]][1] 
+       strsplit(strsplit(calls[z], split = &quot;INDIV-&quot;)[[1]][2], split = &quot;_&quot;)[[1]][1]
       })
-      
+
       itbl &lt;- table(indivs)
-      
+
       wrong &lt;- as.vector(itbl[which(names(itbl) != tmp_class_IDs[x])])
       return(wrong)
-    
+
     }))
-  wrong_class &lt;- sum(wrong)  
-  
+  wrong_class &lt;- sum(wrong)
+
   # extract the total number of calls classified
   N &lt;- sum(unlist(lapply(1:nrow(tmp), function(z){
     calls &lt;- as.character(tmp$spectros[z])
     length(strsplit(calls, split = &quot;;&quot;)[[1]])
   })))
-  
+
   # calculate classification accuracy over all calls
   return(((N - wrong_class)/N)*100)
-  
+
 })))</code></pre>
 <div id="classification-accuracy" class="section level3">
 <h3>Classification Accuracy</h3>
@@ -442,33 +445,33 @@ site_shiny_tbl &lt;- readRDS(file.path(path = in_path_st, &quot;site_scale_shiny
 sel_tables &lt;- list(indiv_shiny_tbl, pair_shiny_tbl, flock_shiny_tbl, site_shiny_tbl)</code></pre>
 <p>Write a function to convert human classifications into a list of binary matrices (one per social scale).</p>
 <pre class="r"><code>df2binmat &lt;- function(X, class_prefix){
-  
+
   # iterate over social scales to make a list of binary matrices
   mat_list &lt;- invisible(pblapply(1:length(social_scales), function(i){
-    
+
     # get all calls for the given social scale
     sel_table &lt;- sel_tables[[i]]
     calls_df &lt;- data.frame(call_ID = paste(sel_table$sound.files, &quot;-1.jpeg&quot;, sep = &quot;&quot;))
-    
+
     # now get the class labels for these calls
     # first extract calls and classes for the given social scale
      tmp &lt;- droplevels(X[grep(paste(&quot;^&quot;, social_scales[i], &quot;$&quot;, sep = &quot;&quot;), X$social_scale), ])
     class_cols &lt;- tmp[, grep(paste(paste(&quot;^&quot;, class_prefix, sep = &quot;&quot;), collapse = &quot;|&quot;), names(X))]
     class_cols &lt;- t(class_cols)
-    
+
     # then iterate over rows and turn this into a data frame with one row per call
     class_df &lt;- data.table::rbindlist(lapply(1:nrow(class_cols), function(y){
       calls_tmp &lt;- unlist(strsplit(class_cols[y, ], split = &quot;;&quot;))
       df &lt;- data.frame(class_label = row.names(class_cols)[y], call_ID = calls_tmp)
       return(df)
     }))
-    
+
     # iterate over rows of the calls data frame for the given social scale, pulling out class labels from the class data frame
     final_df &lt;- data.table::rbindlist(lapply(1:nrow(calls_df), function(y){
-      
+
       call_tmp &lt;- calls_df[y, ]
       label &lt;- as.character(class_df$class_label[grep(paste(&quot;^&quot;, call_tmp, &quot;$&quot;, sep = &quot;&quot;), class_df$call_ID)])
-      
+
       return(data.frame(call_ID = call_tmp, class_label = label, ID = as.character(sel_table$ID[y])))
 
     }))
@@ -479,15 +482,15 @@ sel_tables &lt;- list(indiv_shiny_tbl, pair_shiny_tbl, flock_shiny_tbl, site_shi
     class_comps &lt;- unlist(lapply(1:nrow(calls_df), function(y){
       as.numeric(final_df$class_label[y] == final_df$class_label)
     }))
-    
+
     # build the final matrix of human classifications, which contains binary encoding for whether or not calls were classified in the same group per observer and social scale
     human_class_mat &lt;- matrix(class_comps, nrow = nrow(final_df), ncol = nrow(final_df), byrow = TRUE)
     dimnames(human_class_mat) &lt;- list(final_df$ID, final_df$ID)
-    
+
     return(human_class_mat)
-    
+
   }))
-  
+
   names(mat_list) &lt;- social_scales
   return(mat_list)
 
@@ -542,7 +545,7 @@ call_IDs &lt;- gsub(&quot;WAV_&quot;, &quot;WAV-&quot;, call_IDs)
 xc_mat_i_sub &lt;- xc_mat_i[grep(paste(paste(&quot;^&quot;, call_IDs, &quot;$&quot;, sep = &quot;&quot;), collapse = &quot;|&quot;), dimnames(xc_mat_i)[[1]]), grep(paste(paste(&quot;^&quot;, call_IDs, &quot;$&quot;, sep = &quot;&quot;), collapse = &quot;|&quot;), dimnames(xc_mat_i)[[2]])]
 # dimnames(xc_mat_i_sub) # checking
 
-# replace dimnames to be friendlier for plotting 
+# replace dimnames to be friendlier for plotting
 dimnames(xc_mat_i_sub) &lt;- list(sel_table$ID, sel_table$ID)
 dim(xc_mat_i_sub)
 
@@ -554,7 +557,7 @@ dimnames(rf_mat_i) &lt;- list(rf_dim_nms, rf_dim_nms)
 rf_mat_i_sub &lt;- rf_mat_i[grep(paste(paste(&quot;^&quot;, call_IDs, &quot;$&quot;, sep = &quot;&quot;), collapse = &quot;|&quot;), dimnames(rf_mat_i)[[1]]), grep(paste(paste(&quot;^&quot;, call_IDs, &quot;$&quot;, sep = &quot;&quot;), collapse = &quot;|&quot;), dimnames(rf_mat_i)[[2]])]
 # dimnames(rf_mat_i_sub) # checking
 
-# replace dimnames to be friendlier for plotting 
+# replace dimnames to be friendlier for plotting
 dimnames(rf_mat_i_sub) &lt;- list(sel_table$ID, sel_table$ID)
 
 # make the binary matrix of group identity at this social scale
@@ -586,14 +589,14 @@ call_IDs &lt;- gsub(&quot;WAV_&quot;, &quot;WAV-&quot;, call_IDs)
 xc_mat_h_pairs &lt;- xc_mat_h[grep(paste(paste(&quot;^&quot;, call_IDs, &quot;$&quot;, sep = &quot;&quot;), collapse = &quot;|&quot;), dimnames(xc_mat_h)[[1]]), grep(paste(paste(&quot;^&quot;, call_IDs, &quot;$&quot;, sep = &quot;&quot;), collapse = &quot;|&quot;), dimnames(xc_mat_h)[[2]])]
 # dimnames(xc_mat_h_pairs) # checking
 
-# replace dimnames to be friendlier for plotting 
+# replace dimnames to be friendlier for plotting
 dimnames(xc_mat_h_pairs) &lt;- list(sel_table$ID, sel_table$ID)
 
 # repeat filtering for the random forests matrix
 rf_mat_h_pairs &lt;- rf_mat_h[grep(paste(paste(&quot;^&quot;, call_IDs, &quot;$&quot;, sep = &quot;&quot;), collapse = &quot;|&quot;), dimnames(rf_mat_h)[[1]]), grep(paste(paste(&quot;^&quot;, call_IDs, &quot;$&quot;, sep = &quot;&quot;), collapse = &quot;|&quot;), dimnames(rf_mat_h)[[2]])]
 # dimnames(rf_mat_h_pairs) # checking
 
-# replace dimnames to be friendlier for plotting 
+# replace dimnames to be friendlier for plotting
 dimnames(rf_mat_h_pairs) &lt;- list(sel_table$ID, sel_table$ID)
 
 # make the binary matrix of group identity at this social scale
@@ -619,14 +622,14 @@ call_IDs &lt;- gsub(&quot;WAV_&quot;, &quot;WAV-&quot;, call_IDs)
 xc_mat_h_flocks &lt;- xc_mat_h[grep(paste(paste(&quot;^&quot;, call_IDs, &quot;$&quot;, sep = &quot;&quot;), collapse = &quot;|&quot;), dimnames(xc_mat_h)[[1]]), grep(paste(paste(&quot;^&quot;, call_IDs, &quot;$&quot;, sep = &quot;&quot;), collapse = &quot;|&quot;), dimnames(xc_mat_h)[[2]])]
 # dimnames(xc_mat_h_flocks) # checking
 
-# replace dimnames to be friendlier for plotting 
+# replace dimnames to be friendlier for plotting
 dimnames(xc_mat_h_flocks) &lt;- list(sel_table$ID, sel_table$ID)
 
 # repeat filtering for the random forests matrix
 rf_mat_h_flocks &lt;- rf_mat_h[grep(paste(paste(&quot;^&quot;, call_IDs, &quot;$&quot;, sep = &quot;&quot;), collapse = &quot;|&quot;), dimnames(rf_mat_h)[[1]]), grep(paste(paste(&quot;^&quot;, call_IDs, &quot;$&quot;, sep = &quot;&quot;), collapse = &quot;|&quot;), dimnames(rf_mat_h)[[2]])]
 # dimnames(rf_mat_h_flocks) # checking
 
-# replace dimnames to be friendlier for plotting 
+# replace dimnames to be friendlier for plotting
 dimnames(rf_mat_h_flocks) &lt;- list(sel_table$ID, sel_table$ID)
 
 # make the binary matrix of group identity at this social scale
@@ -652,14 +655,14 @@ call_IDs &lt;- gsub(&quot;WAV_&quot;, &quot;WAV-&quot;, call_IDs)
 xc_mat_h_sites &lt;- xc_mat_h[grep(paste(paste(&quot;^&quot;, call_IDs, &quot;$&quot;, sep = &quot;&quot;), collapse = &quot;|&quot;), dimnames(xc_mat_h)[[1]]), grep(paste(paste(&quot;^&quot;, call_IDs, &quot;$&quot;, sep = &quot;&quot;), collapse = &quot;|&quot;), dimnames(xc_mat_h)[[2]])]
 # dimnames(xc_mat_h_sites) # checking
 
-# replace dimnames to be friendlier for plotting 
+# replace dimnames to be friendlier for plotting
 dimnames(xc_mat_h_sites) &lt;- list(sel_table$ID, sel_table$ID)
 
 # repeat filtering for the random forests matrix
 rf_mat_h_sites &lt;- rf_mat_h[grep(paste(paste(&quot;^&quot;, call_IDs, &quot;$&quot;, sep = &quot;&quot;), collapse = &quot;|&quot;), dimnames(rf_mat_h)[[1]]), grep(paste(paste(&quot;^&quot;, call_IDs, &quot;$&quot;, sep = &quot;&quot;), collapse = &quot;|&quot;), dimnames(rf_mat_h)[[2]])]
 # dimnames(rf_mat_h_sites) # checking
 
-# replace dimnames to be friendlier for plotting 
+# replace dimnames to be friendlier for plotting
 dimnames(rf_mat_h_sites) &lt;- list(sel_table$ID, sel_table$ID)
 
 # make the binary matrix of group identity at this social scale
@@ -673,18 +676,18 @@ dimnames(binmat_site_ID) &lt;- list(sel_table$ID, sel_table$ID)
 <p>The subsetted SPCC and random forests matrices look good, as do the binary matrices of group identity across social scales. We used a model-based clustering approach to ask how well clustering algorithms classified calls based on similarity matrices per method.</p>
 <pre class="r"><code># x &lt;- 2
 human_mat_list &lt;- invisible(pblapply(1:length(social_scales), function(x){
-  
+
   ss &lt;- social_scales[x]
-  
+
   # extract human classification matrices across observers for this social scale
   human_class_mats &lt;- lapply(1:length(human_class_mats_by_observer), function(x){
     human_class_mats_by_observer[[x]][[ss]]
   })
-  
+
   # add matrices for this scale together across observers
   # yields a matrix in which each cell indicates how often calls were classified together across observers
   human_class_mat &lt;- Reduce('+', human_class_mats)
-  
+
   # scale the matrix values between 0 and 1 to be as similar as possible to the SPCC and random forests matrices
   human_class_mat &lt;- apply(human_class_mat, MARGIN = 2, FUN = function(X) (X - min(X))/diff(range(X)))
 
@@ -708,18 +711,18 @@ names(asim_mat_list) &lt;- asim_method</code></pre>
 <h2>t-SNE and Model-based Clustering</h2>
 <p>Iterate over similarity methods and social scales to: 1) perform t-SNE per similarity method, 2) perform model-based clustering per simiarity method, 3) make a data frame with the new embeddings as well as metadata for plotting, including the model-based clustering classes.</p>
 <pre class="r"><code>df_list &lt;- invisible(pblapply(1:length(asim_method), function(i){
-  
+
   asim_mats &lt;- asim_mat_list[[asim_method[i]]]
-  
+
   # iterate over social scales
   df_list &lt;- lapply(1:length(social_scales), function(x){
-    
+
     ss &lt;- social_scales[x]
-    
+
     # convert the similarity matrix to a distance matrix
     # will be used for t-SNE and model-based clustering
     dist_mat &lt;- stats::as.dist(1 - asim_mats[[x]], diag = TRUE, upper = TRUE)
-    
+
     # perform t-SNE
 
     # the optimized perplexity for focal individual feature extraction was too large for this t-SNE visualization, so we used the maximum perplexity possible given the dimensions of the distance matrix
@@ -738,20 +741,20 @@ names(asim_mat_list) &lt;- asim_method</code></pre>
 
     # overwrite tmp with the solution that minimized KL
     tsne &lt;- tmp[[which(KL == min(KL))]]
-  
+
     # perform model-based clustering while limiting the possible number of clusters to the true number of groups in each call data set
     set.seed(seed)
     mBIC_res &lt;- mclust::Mclust(data = dist_mat, G = 1:4)
-  
+
     # make a data frame with output
     df &lt;- data.frame(asim_method = asim_method[i], social_scale = ss, X = tsne$Y[, 1], Y = tsne$Y[, 2], true_group = as.numeric(factor(dimnames(asim_mats[[x]])[[1]])), cluster = mBIC_res$classification)
-    
+
     return(df)
-    
+
   })
-  
+
   return(rbindlist(df_list))
-  
+
 }))
 
 clustering_df &lt;- rbindlist(df_list)
@@ -778,29 +781,29 @@ num_spectros &lt;- c(4, 2, 3, 4)
 
 # iterate over similarity methods
 df_list &lt;- invisible(pblapply(1:length(asim_method), function(i){
-  
+
   # iterate over social scales
   df_list &lt;- lapply(1:length(social_scales), function(x){
-    
+
     am &lt;- asim_method[i]
     ss &lt;- social_scales[x]
-    
+
     # subset data and count observations per cluster identified by model-based clustering
-    clust_df &lt;- clustering_df %&gt;% 
-      filter(as.character(asim_method) == am) %&gt;% 
+    clust_df &lt;- clustering_df %&gt;%
+      filter(as.character(asim_method) == am) %&gt;%
       filter(social_scale == ss) %&gt;%
-      droplevels() 
-    
+      droplevels()
+
     # setting parameters for placing text labels in faceted plot below
     if(am == &quot;Visual Inspection&quot; &amp; ss == &quot;Individual&quot;){
        X &lt;- -Inf
        Y &lt;- -Inf
     } else if(am == &quot;SPCC&quot; &amp; ss == &quot;Pair&quot;){
        X &lt;- Inf
-       Y &lt;- -Inf 
+       Y &lt;- -Inf
     } else if(am == &quot;Random Forests&quot; &amp; ss == &quot;Pair&quot;){
        X &lt;- Inf
-       Y &lt;- -Inf 
+       Y &lt;- -Inf
     } else if(am == &quot;Visual Inspection&quot; &amp; ss == &quot;Flock&quot;){
        X &lt;- -Inf
        Y &lt;- -Inf
@@ -808,52 +811,52 @@ df_list &lt;- invisible(pblapply(1:length(asim_method), function(i){
       X &lt;- -Inf
       Y &lt;- -Inf
     }
-    
+
     # iterate over clusters to find the number of incorrectly assigned calls per cluster
     incorr &lt;- unlist(lapply(1:clusters, function(y){
-      
-      tmp &lt;- clust_df %&gt;% 
-        filter(cluster == y) %&gt;% 
+
+      tmp &lt;- clust_df %&gt;%
+        filter(cluster == y) %&gt;%
         droplevels()
-      
+
       if(nrow(tmp) &lt; num_spectros[x] &amp; length(unique(tmp$true_group)) == 1){
-        
+
         incorr &lt;- num_spectros[x] - nrow(tmp)
-        
+
       } else if(nrow(tmp) &gt; num_spectros[x] &amp; length(unique(tmp$true_group)) &gt; 1){
-        
+
         incorr &lt;- nrow(tmp) - num_spectros[x]
-        
+
       } else if(nrow(tmp) &lt;= num_spectros[x] &amp; length(unique(tmp$true_group)) &gt; 1){
-        
+
         incorr &lt;- abs(length(unique(tmp$true_group)) - length(unique(tmp$cluster)))
-        
+
         # correctly assigned
       } else if(nrow(tmp) == num_spectros[x] &amp; length(unique(tmp$true_group)) == 1){
-        
+
         incorr &lt;- 0
-        
+
         # if no calls were assigned to this cluster, these incorrect assignments will be picked up when evaluating other clusters
       } else if(nrow(tmp) == 0){
-        
+
         incorr &lt;- 0
-        
+
       }
-      
+
       return(incorr)
-      
+
     }))
-    
+
     incorr &lt;- (sum(unlist(incorr))/nrow(clust_df)*100)
     percent_corr &lt;- paste(round(100 - incorr, digits = 2), &quot;%&quot;, sep = &quot;&quot;)
-    
+
     df &lt;- data.frame(asim_method = am, social_scale = ss, percent_corr = percent_corr, X = X, Y = Y)
     return(df)
-    
+
   })
-  
+
   return(rbindlist(df_list))
-  
+
 }))
 
 corr_df &lt;- rbindlist(df_list)
@@ -874,7 +877,7 @@ corr_df</code></pre>
 <div id="supplementary-figure-6" class="section level3">
 <h3>Supplementary Figure 6</h3>
 <p>Make a faceted plot by smilarity method and social scales of the true group identity versus model-based clustering results. This is Supplementary Figure 6 in supplementary materials.</p>
-<pre class="r"><code># initialize aesthetics  
+<pre class="r"><code># initialize aesthetics
 n &lt;- 12
 cols &lt;- c(topo.colors(n, alpha = 1)[2], terrain.colors(n, alpha = 1)[2], heat.colors(n, alpha = 1)[1], heat.colors(n, alpha = 1)[5])
 shps &lt;- c(0, 21, 24, 6)
@@ -906,36 +909,36 @@ y_buf</code></pre>
 <pre class="r"><code>blank_data &lt;- data.frame(asim_method = rep(corr_df$asim_method, 2), social_scale = rep(corr_df$social_scale, 2), x = c(as.vector(x_mins) - as.vector(x_buf), as.vector(x_maxes) + as.vector(x_buf)), y = c(as.vector(y_mins) - as.vector(y_buf), as.vector(y_maxes) + as.vector(y_buf)))
 
 # make graphic
-gg &lt;- ggplot(data = clustering_df, aes(x = X, y = Y)) + 
-  
+gg &lt;- ggplot(data = clustering_df, aes(x = X, y = Y)) +
+
   # yields nice strip text on top and right but cannot yield truly free axes
   # facet_grid(rows = vars(social_scale), cols = vars(asim_method), scales = &quot;free&quot;, shrink = TRUE, space = &quot;fixed&quot;) +
 
   facet_wrap(vars(social_scale, asim_method), ncol = length(unique(clustering_df$asim_method)), scales = &quot;free&quot;) +
-  
+
   # labeller = label_values
 
-  geom_point(aes(shape = true_group), fill = gray.colors(n, alpha = 1)[2], size = 3.5) + 
-  
+  geom_point(aes(shape = true_group), fill = gray.colors(n, alpha = 1)[2], size = 3.5) +
+
   # overlay circular points for clusters
   geom_point(aes(color = cluster), shape = 19, size = 2) +
-  
-  scale_shape_manual(values = shps) + 
-  
+
+  scale_shape_manual(values = shps) +
+
   guides(shape = guide_legend(title = &quot;True Group&quot;), color = guide_legend(title = &quot;Cluster&quot;)) +
-  
-  xlab(&quot;t-SNE Dimension 1&quot;) + ylab(&quot;t-SNE Dimension 2&quot;) + 
-  
+
+  xlab(&quot;t-SNE Dimension 1&quot;) + ylab(&quot;t-SNE Dimension 2&quot;) +
+
   geom_blank(data = blank_data, aes(x = x, y = y)) +
-  
+
   expand_limits(y = 0) + scale_y_continuous(expand = c(0, 0)) +
-  
+
   geom_text(data = corr_df, aes(label = percent_corr, vjust = -0.45), hjust = 0.1*c(-1, -1, -1, -1, -1, 11, -1, -1, -1, 11, -1, -1), size = 4, fontface = &quot;bold&quot;) +
-  
+
   # scale_color_manual(colors = cols) +
 
   theme(panel.background = element_rect(fill = &quot;white&quot;, color = &quot;black&quot;), plot.background = element_rect(fill = &quot;white&quot;), panel.grid.major = element_line(size = 1, colour = &quot;white&quot;), panel.grid.minor = element_line(size = 0.75, colour = &quot;white&quot;), axis.line = element_line(size = 0.5, colour = &quot;black&quot;), axis.title = element_text(size = 14), axis.text = element_text(size = 10), strip.text = element_text(size = 11, face = &quot;bold&quot;), legend.position = &quot;top&quot;, legend.title = element_text(size = 12), legend.text = element_text(size = 12)) +
-  
+
     ggtitle(&quot;&quot;)
 
 gg</code></pre>
@@ -955,11 +958,11 @@ gg</code></pre>
 <h2>Permutation Tests and Effect Sizes</h2>
 <p>Prepare for the permutation test by identifying individuals in lone and social contexts at higher social scales.</p>
 <pre class="r"><code># read in the higher social scale SPCC matrix
-xc_mat_h &lt;- readRDS(file.path(h_path, &quot;xc_mat_higher_social_scales.RDS&quot;)) 
+xc_mat_h &lt;- readRDS(file.path(h_path, &quot;xc_mat_higher_social_scales.RDS&quot;))
 # str(xc_mat_h)
 
 # convert to a distance matrix
-xc_mat_h &lt;- 1 - xc_mat_h 
+xc_mat_h &lt;- 1 - xc_mat_h
 
 # find calls of individuals that were sampled flying alone for the site social scale
 table(ccs$Group_size)
@@ -995,60 +998,60 @@ perm_test_list &lt;- invisible(pblapply(1:length(sites), function(i){
 
   # first filter the SPCC matrix by the calls for the given site
   xc_tmp &lt;- xc_mat_h[grep(paste(paste(&quot;_&quot;, sites[i], &quot;_&quot;, sep = &quot;&quot;), collapse = &quot;|&quot;), dimnames(xc_mat_h)[[1]]), grep(paste(paste(&quot;_&quot;, sites[i], &quot;_&quot;, sep = &quot;&quot;), collapse = &quot;|&quot;), dimnames(xc_mat_h)[[2]])]
-  
+
   # extract distances to all other calls for the lone individuals
   xc_tmp_lone &lt;- xc_tmp[, grep(paste(paste(&quot;^&quot;, site_indivs$call_ID[grep(sites[i], site_indivs$call_ID)], &quot;$&quot;, sep = &quot;&quot;), collapse = &quot;|&quot;), dimnames(xc_tmp)[[2]])]
-  
+
   # make sure to exclude calls compared to themselves
-  xc_tmp_lone &lt;- xc_tmp_lone[xc_tmp_lone != 0] 
-   
+  xc_tmp_lone &lt;- xc_tmp_lone[xc_tmp_lone != 0]
+
   # extract distances to all other calls for the social individuals
   xc_tmp_social &lt;- xc_tmp[, grep(paste(paste(&quot;^&quot;, site_social$call_ID[grep(sites[i], site_social$call_ID)], &quot;$&quot;, sep = &quot;&quot;), collapse = &quot;|&quot;), dimnames(xc_tmp)[[2]])]
-   
+
   # make sure to exclude calls compared to themselves
-  xc_tmp_social &lt;- xc_tmp_social[xc_tmp_social != 0]  
-  
+  xc_tmp_social &lt;- xc_tmp_social[xc_tmp_social != 0]
+
   # initialize the observed differences between the distance for lone or social calls
   obs_diff &lt;- abs(mean(xc_tmp_lone) - mean(xc_tmp_social))
-  
+
   # initialize the length of the lone call distances
   # this will serve as the sample size for the permuted lone and social distance per iteration
   nl &lt;- length(xc_tmp_lone)
-  
+
   # combine the SPCC values for lone and social individuals
   all_xc_vals &lt;- c(xc_tmp_lone, xc_tmp_social)
-  
+
   df_list &lt;- lapply(1:iteratns, function(x){
-    
+
     # randomly sample distances without replacement to represent the lone distances
   rsamp_l &lt;- sample(all_xc_vals, size = nl, replace = FALSE)
-  
+
   # randomly sample distances without replacement to represent the social distances
   rsamp_s &lt;- sample(all_xc_vals, size = nl, replace = FALSE)
-  
+
   # save the mean of each permuted group
   df &lt;- data.frame(site = sites[i], iteratn = x, mean_bw = abs(mean(rsamp_l) - mean(rsamp_s)))
-  
+
   return(df)
-    
+
   })
 
   df &lt;- rbindlist(df_list)
-  
+
   # iterate over sites to calculate p-values
   p_higher &lt;- length(which(df$mean_bw &gt; obs_diff))/iteratns
   p_lower &lt;- length(which(df$mean_bw &lt; obs_diff))/iteratns
-  
+
   # calculate the effect size of the observed difference
   effect &lt;- cohen.d(d = xc_tmp_lone, f = xc_tmp_social, pooled = TRUE, hedges.correction = TRUE, conf.level = 0.95)
   # str(effect)
-  
+
   final_df &lt;- data.frame(site = sites[i], perm_sample_size = nl, num_higher = length(which(df$mean_bw &gt; obs_diff)), num_lower = length(which(df$mean_bw &lt; obs_diff)), p_higher = p_higher, p_lower = p_lower, effect_size = round(effect$estimate, digits = 2), effect_size_95CI_lower = round(effect$conf.int[[&quot;lower&quot;]], digits = 2), effect_size_95CI_upper = round(effect$conf.int[[&quot;upper&quot;]], digits = 2))
-  
+
   return(final_df)
-  
-  
-  
+
+
+
 }))
 
 perm_test_df &lt;- rbindlist(perm_test_list)
@@ -1059,7 +1062,7 @@ saveRDS(perm_test_df, file.path(out_path, &quot;perm_test_df_1.RDS&quot;))</code
 <p>This permutation test will be somewhat different, because here, the number of repeatedly sampled calls at the individual scale outweighs those of the site scale recorded in a confirmed social context.</p>
 <p>Prepare for the permutation test with calls from site 1145, including repeatedly sampled individuals.</p>
 <pre class="r"><code># read in the matrix of SPCC similarity for repeatedly sampled individuals
-xc_mat_i &lt;- readRDS(file.path(i_path, &quot;xc_mat_indiv_scale.RDS&quot;)) 
+xc_mat_i &lt;- readRDS(file.path(i_path, &quot;xc_mat_indiv_scale.RDS&quot;))
 # str(xc_mat_i)
 
 # convert to a distance matrix
@@ -1071,13 +1074,13 @@ xc_mat_i_1145 &lt;- xc_mat_i[grep(&quot;_1145-&quot;, dimnames(xc_mat_i)[[1]]), 
 
 # replace dimnames of each matrix with individual IDs
 rsindiv_IDs &lt;- sapply(1:length(dimnames(xc_mat_i_1145)[[1]]), function(x){
-  
+
   if(grepl(&quot;UNM&quot;, dimnames(xc_mat_i_1145)[[1]][x])){
     strsplit(strsplit(dimnames(xc_mat_i_1145)[[1]][x], split = &quot;_&quot;)[[1]][5], split = &quot;-&quot;)[[1]][3]
   } else {
     strsplit(strsplit(dimnames(xc_mat_i_1145)[[1]][x], split = &quot;_&quot;)[[1]][5], split = &quot;-&quot;)[[1]][2]
   }
-  
+
 })
 
 # rsindiv_IDs
@@ -1090,10 +1093,10 @@ indivs &lt;- unique(rsindiv_IDs)
 # indivs
 
 df_list &lt;- invisible(pblapply(1:length(indivs), function(x){
-  
+
    # exclude calls from the same individual
   tmp &lt;- xc_mat_i_1145[grep(indivs[x], dimnames(xc_mat_i_1145)[[1]]), -grep(indivs[x], dimnames(xc_mat_i_1145)[[2]])]
-  
+
   # iterate over calls and return distances to all other calls of all other individuals while excluding calls from the same individual
   df_list &lt;- lapply(1:length(dimnames(tmp)[[1]]), function(i){
     vals &lt;- tmp[i, ]
@@ -1109,7 +1112,7 @@ indivs_df &lt;- rbindlist(df_list)
 # str(indivs_df)
 
 # read in the SPCC matrix for higher social scales
-xc_mat_h &lt;- readRDS(file.path(h_path, &quot;xc_mat_higher_social_scales.RDS&quot;)) 
+xc_mat_h &lt;- readRDS(file.path(h_path, &quot;xc_mat_higher_social_scales.RDS&quot;))
 # str(xc_mat_h)
 
 # convert to a distance matrix
@@ -1131,7 +1134,7 @@ xc_social_1145 &lt;- xc_mat_h_1145[xc_mat_h_1145 != 0]
 <pre class="r"><code># initialize the observed differences between the distance for lone or social calls
 obs_diff &lt;- abs(mean(indivs_df$dists) - mean(xc_social_1145))
 obs_diff
-  
+
 # initialize the length of the social call distances
 # this will serve aas the sample size for the permuted individual and social distance per iteration
 ns &lt;- length(xc_social_1145)
@@ -1140,32 +1143,32 @@ ns &lt;- length(xc_social_1145)
 all_xc_vals &lt;- c(indivs_df$dists, xc_social_1145)
 
 iteratns &lt;- 1000
-  
+
 perm_test_list2 &lt;- invisible(pblapply(1:iteratns, function(x){
-    
+
   # randomly sample distances without replacement to represent the lone distances
   rsamp_l &lt;- sample(all_xc_vals, size = ns, replace = FALSE)
-  
+
   # randomly sample distances without replacement to represent the social distances
   rsamp_s &lt;- sample(all_xc_vals, size = ns, replace = FALSE)
-  
+
   # save the mean of each permuted group
   df &lt;- data.frame(site = &quot;1145&quot;, iteratn = x, mean_bw = abs(mean(rsamp_l) - mean(rsamp_s)))
-  
+
   return(df)
-    
+
 }))
-  
+
 perm_test_df2 &lt;- rbindlist(perm_test_list2)
 
 # calculate p-values for whether or not the permuted difference was significantly greater or less than the observed difference
 p_higher &lt;- length(which(perm_test_df2$mean_bw &gt; obs_diff))/iteratns
 p_lower &lt;- length(which(perm_test_df2$mean_bw &lt; obs_diff))/iteratns
-  
+
 # calculate the effect size of the observed difference
 effect &lt;- cohen.d(d = indivs_df$dists, f = xc_social_1145, pooled = TRUE, hedges.correction = TRUE, conf.level = 0.95)
 # str(effect)
-  
+
 final_df &lt;- data.frame(site = &quot;1145&quot;, perm_sample_size = ns, num_higher = length(which(perm_test_df2$mean_bw &gt; obs_diff)), num_lower = length(which(perm_test_df2$mean_bw &lt; obs_diff)), p_higher = p_higher, p_lower = p_lower, effect_size = round(effect$estimate, digits = 2), effect_size_95CI_lower = round(effect$conf.int[[&quot;lower&quot;]], digits = 2), effect_size_95CI_upper = round(effect$conf.int[[&quot;upper&quot;]], digits = 2))
 
 saveRDS(final_df, file.path(out_path, &quot;perm_test_df_2.RDS&quot;))</code></pre>
@@ -1457,20 +1460,20 @@ kable(tbl, digits = 3, align = &quot;c&quot;)</code></pre>
 <h2>Effect Sizes for Acoustic Convergence at the Individual Scale</h2>
 <p>We also calculated the effect sizes for acoustic convergence within versus among repeatedly sampled individuals (e.g. the effect size of acoustic convergence at the individual scale, or individual signatures). This served as a baseline for assessing the strength of the effect of social context (lone versus social) on acoustic convergence (see above).</p>
 <pre class="r"><code>indiv_es &lt;- invisible(pblapply(1:length(indivs), function(x){
-  
+
   # SPCC distances within the given individual and all others
   tmp_in &lt;- xc_mat_i_1145[grep(indivs[x], dimnames(xc_mat_i_1145)[[1]]), grep(indivs[x], dimnames(xc_mat_i_1145)[[2]])]
   tmp_in &lt;- tmp_in[lower.tri(tmp_in)]
-  
+
    # SPCC distances between the given individual and all others
   tmp_bw &lt;- as.vector(xc_mat_i_1145[grep(indivs[x], dimnames(xc_mat_i_1145)[[1]]), -grep(indivs[x], dimnames(xc_mat_i_1145)[[2]])])
 
   # calculate the effect size of the observed difference
   effect &lt;- cohen.d(d = tmp_bw, f = tmp_in, pooled = TRUE, hedges.correction = TRUE, conf.level = 0.95)
   effect
-  
+
   return(data.frame(indiv = indivs[x], effect_size = effect$estimate, es_95CI_lower = effect$conf.int[[&quot;lower&quot;]], es_95CI_upper = effect$conf.int[[&quot;upper&quot;]]))
-  
+
 }))
 
 indiv_es &lt;- rbindlist(indiv_es)</code></pre>
@@ -1547,7 +1550,7 @@ kable(tbl, digits = 2, align = &quot;c&quot;)</code></pre>
 <pre class="r"><code>tapply(ccs_fi$sound.files, ccs_fi$indiv, function(X){
   length(unique(X))
 })</code></pre>
-<pre><code>## AAT RAW UM1 UM2 UM3 UM4 UM5 ZW8 
+<pre><code>## AAT RAW UM1 UM2 UM3 UM4 UM5 ZW8
 ##   5   2   2   1   1   1   1   4</code></pre>
 <p>Merge the selection table with metadata from whole recordings.</p>
 <pre class="r"><code>meta &lt;- read.csv(file.path(h_path, &quot;ParakeetRecordings_MASTER_03_14_18_GSV.csv&quot;), header = TRUE)
@@ -1586,7 +1589,7 @@ str(meta)</code></pre>
 tapply(tmp$sound.files, tmp$indiv, function(X){
   length(unique(X))
 })</code></pre>
-<pre><code>## AAT RAW UM1 UM2 UM3 UM4 UM5 ZW8 
+<pre><code>## AAT RAW UM1 UM2 UM3 UM4 UM5 ZW8
 ##   1  NA   2  NA  NA  NA   1  NA</code></pre>
 <p>How long are each of these recordings (in minutes) per individual?</p>
 <pre class="r"><code>wavs &lt;- tmp %&gt;%
@@ -1627,7 +1630,7 @@ indivs &lt;- as.character(unique(ccs_fi2$indiv))
 indivs
 
 # read in the matrix of SPCC similarity for repeatedly sampled individuals
-xc_mat_i &lt;- readRDS(file.path(i_path, &quot;xc_mat_indiv_scale.RDS&quot;)) 
+xc_mat_i &lt;- readRDS(file.path(i_path, &quot;xc_mat_indiv_scale.RDS&quot;))
 # str(xc_mat_i)
 
 # replace dimnames of each matrix with individual IDs
@@ -1652,23 +1655,23 @@ cores &lt;- parallel::detectCores() - 2
 
 # i &lt;- 1 # testing
 seq_simil &lt;- rbindlist(invisible(pblapply(1:length(indivs), function(i){
-  
+
   # make a matrix of sequence distance per individual
   tmp &lt;- ccs_fi2 %&gt;%
     filter(indiv == indivs[i]) %&gt;%
     pull(call_order)
-  
+
   seq_dist_mat &lt;- stats::dist(tmp, diag = TRUE, upper = TRUE)
-  
+
   # subset the SPCC distance matrix by the given individual
   pat &lt;- grep(paste(&quot;^&quot;, indivs[i], &quot;$&quot;, sep = &quot;&quot;), dimnames(xc_mat_i)[[1]])
   tmp_xc_mat &lt;- xc_mat_i[pat, pat]
-  
+
   # perform a Mantel test
   mntl_res &lt;- vegan::mantel(xdis = seq_dist_mat, ydis = tmp_xc_mat, method = &quot;pearson&quot;, permutations = perms, parallel = cores)
-  
+
   return(data.frame(indiv = indivs[i], num_calls = length(tmp), mantel_r = round(mntl_res$statistic, digits = 2), mantel_p = round(mntl_res$signif, digits = 4), permutations = mntl_res$permutations))
-  
+
 })))
 
 saveRDS(seq_simil, file.path(i_path, &quot;Mantel_test_temporal_sequences.RDS&quot;))</code></pre>
@@ -1702,30 +1705,30 @@ indivs &lt;- c(&quot;UM2&quot;, &quot;UM3&quot;, &quot;UM4&quot;, &quot;UM5&quot
 # i &lt;- 1
 # x &lt;- 23
 seq_simil &lt;- rbindlist(invisible(pblapply(1:length(indivs), function(i){
-  
+
   # for each call for the given individual, find the distance to all other calls in the same recording
     tmp &lt;- ccs_fi %&gt;%
-    filter(indiv == indivs[i]) 
+    filter(indiv == indivs[i])
     # str(tmp)
-    
+
     # loop over each call, and make two subsets:
     # calls that are before it and after it
     # then calculate the temporal distance based on call placement
     dists &lt;- unlist(lapply(1:nrow(tmp), function(x){
-      
+
       b4 &lt;- c(x, which(tmp$start &lt; tmp$start[x]))
-      
+
       before &lt;- b4[order(b4)]
       after &lt;- which(tmp$start &gt; tmp$start[x])
-      
+
       if(length(before) &gt; 0){
         dists_b &lt;- tmp$start[x] - tmp[before, &quot;start&quot;]
       }
-      
+
       if(length(after) &gt; 0){
         dists_a &lt;- tmp[after, &quot;start&quot;] - tmp$start[x]
-      } 
-      
+      }
+
       if(length(before) &gt; 0 &amp; length(after) &gt; 0){
         return(c(dists_b, dists_a))
       } else if(length(before) == 0){
@@ -1733,25 +1736,25 @@ seq_simil &lt;- rbindlist(invisible(pblapply(1:length(indivs), function(i){
       } else if(length(after) == 0){
         return(c(dists_b))
       }
-      
+
     }))
-  
+
   # turn this vector into a symmetric matrix of temporal distance per individual
   mat &lt;- matrix(dists, byrow = TRUE, nrow = nrow(tmp), ncol = nrow(tmp))
   # mat[1:10, 1:10] # checking, looks good
-  
+
   # convert to a distance object
   seq_dist_mat &lt;- stats::as.dist(mat, diag = TRUE, upper = TRUE)
-  
+
   # subset the SPCC distance matrix by the given individual
   pat &lt;- grep(paste(&quot;^&quot;, indivs[i], &quot;$&quot;, sep = &quot;&quot;), dimnames(xc_mat_i)[[1]])
   tmp_xc_mat &lt;- xc_mat_i[pat, pat]
-  
+
   # perform a Mantel test
   mntl_res &lt;- vegan::mantel(xdis = seq_dist_mat, ydis = tmp_xc_mat, method = &quot;pearson&quot;, permutations = perms, parallel = cores)
-  
+
   return(data.frame(indiv = indivs[i], num_calls = nrow(tmp), mantel_r = round(mntl_res$statistic, digits = 2), mantel_p = round(mntl_res$signif, digits = 4), permutations = mntl_res$permutations))
-  
+
 })))
 
 saveRDS(seq_simil, file.path(i_path, &quot;Mantel_test_temporal_sequences_unmarked.RDS&quot;))</code></pre>
