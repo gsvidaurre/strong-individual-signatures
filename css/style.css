@@ -17,7 +17,7 @@
   flex-wrap: nowrap;
   flex-direction: column;
   align-items: start;
-  margin-left: 1rem; 
+  margin-left: 1rem;
 }
 .title, .subtitle, .description {
   text-align: center;
@@ -28,7 +28,11 @@
 .description {
   color: #004723 !important;
 }
+.mobile {
+  display: none;
+}
 .menu {
+  display: block;
   text-align: left !important;
   list-style: none;
 }
@@ -67,4 +71,59 @@ footer {
   max-width: 1220px;
   margin: 2rem auto;
   text-align: left;
+}
+
+@media only screen and (max-width: 768px) {
+
+  body, footer {
+    max-width: 100% !important;
+  }
+
+  .main {
+    min-width: 300px;
+    max-width: 100% !important;
+    margin: 2rem auto;
+    text-align: center;
+  }
+
+  .title {
+    font-size: 24px;
+  }
+  .subtitle {
+    font-size: 20px !important;
+  }
+  .menu {
+    display: none !important;
+  }
+
+  .mobile {
+    display: flex !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    justify-content: center;
+    flex-direction: column;
+    list-style: none;
+  }
+
+  .mobile li a {
+    text-decoration: none;
+  }
+  .mobile li a button {
+    max-width: 100% !important;
+    left: 0;
+    display: flex;
+    flex-wrap: wrap;
+    font-size: 18px;
+    margin: 0.5rem auto;
+    padding: 0.5rem 1rem;
+    border: 1px solid black;
+    border-radius: 5px;
+    text-decoration: none !important;
+    background: transparent;
+  }
+
+  footer {
+    min-width: 300px;
+  }
 }
