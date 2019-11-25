@@ -1,0 +1,3525 @@
+---
+title: <center style="font-size:30px;font-style:normal;color:black;">Supplementary Code 4:</center>
+subtitle: <center style="font-size:30px;font-style:normal;color:#0E0E7D;">Validation of Our Random Forests Analytical Approach</center>
+ &nbsp;
+author: |
+  <center style="font-style:normal;">
+  <a style="font-size:22px;color:#337ab7;text-decoration: underline;"href="http://smith-vidaurre.com/"> Grace Smith-Vidaurre</a><sup><span style="font-size:12px;color:black;text-decoration:none!important;">1*</span></sup>, 
+  <a style="font-size:22px;color:#337ab7;text-decoration: underline;"href="http://marceloarayasalas.weebly.com">Marcelo Araya-Salas</a><sup><span style="font-size:12px;color:black;text-decoration:none!important;">2</span></sup>, 
+  <a style="font-size:22px;color:#337ab7;text-decoration: underline;"href="http://wrightbehaviorlab.org">Timothy F. Wright</a><sup><span style="font-size:12px;color:black;text-decoration:none!important;">1</span></sup></center>
+  &nbsp;
+  <center style="font-size:18px;font-style:normal;color:black;"><sup><span style="font-size:12px;color:black;">1</span></sup>Department of Biology, New Mexico State University, <sup><span style="font-size:12px;color:black;">2</span></sup>Recinto de Golfito, Universidad de Costa Rica</center>
+  <br />
+  <center style="font-size:18px;"><sup style="font-size:12px;">*</sup>gsvidaurre@gmail.com</center>
+  &nbsp;
+date: <center style="font-size:22px;font-style:normal;>`r format(Sys.time(), '%d %B, %Y')`</center>
+  <br />
+output: 
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float:
+      collapsed: false
+---
+
+<style type="text/css">
+
+a:hover {
+  color: #23527c !important;
+}
+
+h1.title {
+  font-size: 32px;
+  color: black;
+  font-weight: normal;
+}
+
+h1 {
+   color: black;
+   font-size: 26px;
+   font-weight: normal;
+}
+
+h2 {
+   color: black;
+   font-size: 24px;
+   font-weight: bold;
+}
+
+h3 {
+   color: black;
+   font-size: 20px;
+   font-weight: normal;
+}
+
+h4 {
+   color: black;
+   font-size: 20px;
+   font-weight: normal;
+}
+
+body{ /* Normal */
+      font-size: 18px;
+  }
+code.r{ /* Code block */
+    font-size: 18px;
+}
+</style>
+
+We compared SPCC and random forests acoustic similarity of contact calls at the site scale between two species: monk parakeets (*Myiopsitta monachus*) and yellow-naped amazons (*Amazona auropalliata*)<a href='#References'><sup>[1]</sup></a>. 
+
+Our overall results can be reproduced by using the data provided with this publication (extended selection tables for the individual and higher social scales, and selection table spreadsheets). Some changes to this code may be necessary to use signals saved in the extended selection tables. Users may observe some slight differences in parameter calculations between signals used from extended selection tables and those we report here (as we performed analyses using signals within original recordings), and should expect slight differences in results from some unsupervised or supervised machine learning methods, due to stochasticity associated with these methods.
+
+We began by moving published yellow-naped amazon (YNA) calls into the same working directory. We then converted .aif files to .wav files using the following code in a UNIX bash shell script, which calls `sox` for the .aif to .wav file format conversion in the working directory:
+```{r echo = TRUE, eval = FALSE}
+
+aifs=`ls *.aif`
+for aif in $aifs
+	do
+	#echo ${aif%*.aif}
+	nm=${aif%*.aif}
+	#echo $nm
+	oldf="$nm.aif"
+	newf="$nm.wav"
+	#echo $newf
+	sox $oldf $newf
+done
+
+```
+
+```{r eval = TRUE, echo = FALSE}
+
+knitr::opts_knit$set(root.dir = "/media/owner/MYIOPSITTA/R/Uruguay2017_MonkParakeet_CallAnalysis/strong-individual-signatures/")
+
+```
+
+```{r echo = TRUE, eval = TRUE, message = FALSE}
+
+rm(list = ls())
+
+X <- c("warbleR", "Rraven", "ggplot2", "pbapply", "parallel", "data.table", "bibtex", "randomForest", "caret", "e1071", "ranger", "edarf", "mclust", "rgeos", "rgdal", "sp", "tidyverse")
+
+invisible(lapply(X, library, character.only = TRUE))
+
+# ggplot theme for plots in knitted output
+theme_AcousticSpace <- function(){
+  theme(panel.background = element_rect(fill = "white"), plot.background = element_rect(fill = "white"), 
+        panel.grid.major = element_line(size = 1, colour = "white"), 
+        panel.grid.minor = element_line(size = 0.75, colour = "white"), 
+        axis.line = element_line(size = 0.45, colour = "black"), 
+        axis.title = element_text(size = 14), 
+        axis.text = element_text
+        (size = 12))
+}
+
+# theme for some manuscript figures
+theme_AcousticSpaceSm <- function(){
+  theme(panel.background = element_rect(fill = "white"), plot.background = element_rect(fill = "white"), 
+        panel.grid.major = element_line(size = 1, colour = "white"), 
+        panel.grid.minor = element_line(size = 0.75, colour = "white"), 
+        axis.line = element_line(size = 0.25, colour = "black"), 
+        axis.title = element_text(size = 8), 
+        axis.text = element_text(size = 6),
+        axis.ticks = element_line(size = 0.25))
+}
+
+```
+
+Set path for validation with another parrot species. 
+```{r echo = TRUE, eval = TRUE}
+
+path <- "/media/owner/MYIOPSITTA/R/Uruguay2017_MonkParakeet_CallAnalysis/Data/YNA_published_data"
+
+```
+
+Total YNA calls.
+```{r echo = TRUE, eval = TRUE}
+
+wavs <- list.files(path = path, pattern = ".wav$")
+
+```
+
+```{r echo = TRUE, eval = FALSE}
+
+length(wavs[grep("YNA", wavs)]) # these include calls from multiple years
+
+```
+
+# YNA Published Calls
+
+The YNA calls were cuts of original recordings, and did not have associated selection tables, which are necessary to use *warbleR* for sound analysis. We created selection tables for the YNA calls and standardized/checked sound file parameters (sampling and bit rates).
+```{r echo = TRUE, eval = TRUE}
+
+sels <- pblapply(1:length(wavs), function(w){
+  tmp <- tuneR::readWave(file.path(path, wavs[w]))
+  species <- strsplit(wavs[w], split = "_")[[1]][1]
+  samp_rate <- tmp@samp.rate
+  bit_rate <- tmp@bit
+  start <- 0
+  end <- duration(tmp)
+  return(data.frame(species = species, sound.files = wavs[w], selec = 1, start = start, end = end, samp_rate = samp_rate, bit_rate = bit_rate))
+})
+sels <- rbindlist(sels)
+# str(sels)
+
+```
+
+## Resampling
+
+YNA calls were recorded at 22.05kHz sampling rates at 16 bit sampling depth. We recorded monk parakeet (MNK) calls at a 44.1kHz sampling rate and 16 bit sampling depth, we downsampled MNK calls for this comparison. 
+```{r echo = TRUE, eval = TRUE}
+
+table(sels$samp_rate, sels$bit_rate)
+
+```
+
+# Pre-process YNA Calls
+
+## Visual Quality Control
+
+We performed visual quality control filtering for the YNA calls as per quality control filtering for MNK calls in Supplementary Methods 2. We did not filter YNA calls by SNR, since these clipped calls did not have sufficient space around each call for measuring noise around each signal.
+
+We used the same spectrogram parameters here for YNA as for MNK calls (see Supplementary Methods 2). After generating spectrograms we deleted image files for calls that were visibly poor quality. We also determined a frequency bandpass of 0 - 4kHz for YNA to use in SPCC later.
+```{r echo = TRUE, eval = FALSE}
+
+warbleR::specreator(sels, wn = "hanning", wl = 378, collev = seq(-53, 0, 1), flim = c(0, 10), ovlp = 90, line = FALSE, mar = 0.01, res = 300, path = path)
+
+```
+
+Filter the poor quality calls from the selection table.
+```{r echo = TRUE, eval = FALSE}
+
+img_files <- list.files(path = path, pattern = ".jpeg$")
+img_files 
+
+```
+
+```{r echo = TRUE, eval = FALSE}
+
+# fix image file names for the image files that remain (e.g. the visibly better quality calls)
+img_files <- gsub("-1.jpeg", "", img_files)
+img_files <- gsub(".wav.wav", ".wav", img_files)
+
+# make a metadata column in selection table related to filtering
+sels$Use_Status <- "Y"
+
+# add in N (No) for the 57 calls with deleted image files
+sels$Use_Status[grep(paste(wavs[!wavs %in% img_files], collapse = "|"), sels$sound.files)] <- "N"
+
+# write out the poor quality sound file names for future reference
+saveRDS(wavs[!wavs %in% img_files], file.path(path, "poor_quality_calls.RDS"))
+
+# filter the YNA selection table
+sels <- sels[sels$Use_Status == "Y"]
+
+# how many calls remain?
+nrow(sels) 
+
+```
+
+## Prepare for Sound Analysis
+
+We added blank space before and after each call to facilitate SPCC measurements (see `warbleR::xcorr` documentation). As many calls are separate .wav files clipped to the very start and end of each signal, `xcorr` can return NAs as it encounters non-existent space around each signal. 
+
+We added metadata to the YNA selection table to use for sound analysis and visualizations, and wrote out the selection table as both a .csv and an extended selection table.
+```{r echo = TRUE, eval = FALSE}
+
+sels$sound.files <- as.character(sels$sound.files)
+
+# signal duration
+max(wavdur(files = sels$sound.files[grep("YNA", sels$sound.files)])$duration)
+
+# given these summary statistics, add 0.5 seconds of silence before and after each call
+sil <- 0.5
+
+# x <- 1 # testing
+sels_list <- invisible(pblapply(1:nrow(sels), function(x){
+  
+  # add silence before and after signal 
+  tmp <- seewave::addsilw(readWave(file.path(path, sels$sound.files[x])), at = "start", d = sil, output = "Wave")
+  new_wav <- seewave::addsilw(tmp, at = "end", d = sil, output = "Wave")
+  
+  # write out new .wav file
+  fn <- sels$sound.files[x]
+  fn <- paste(gsub(".wav", "", fn), "buffered.wav", sep = "_")
+  tuneR::writeWave(new_wav, file.path(path, fn), extensible = TRUE)
+  
+  # change the sound file name, start and end coordinates per selection
+  sels$sound.files[x] <- fn
+  sels$start[x] <- sels$start[x] + sil
+  sels$end[x] <- sels$end[x] + sil
+  
+  return(sels[x, ])
+  
+}))
+sels_mod <- data.table::rbindlist(sels_list)
+str(sels_mod)
+
+# make metadata variables
+
+# make a site variable
+# x <- 1
+site <- sapply(1:nrow(sels_mod), function(x){
+  spp <- strsplit(sels_mod$sound.files[x], split = "_")[[1]][1]
+  tmp <- strsplit(sels_mod$sound.files[x], split = "_")[[1]]
+  return(tmp[5])
+})
+unique(site)
+
+# combine site and narrated bird ID to make a unique individual ID
+# this ID will be used to run SPCC per individual per species
+bird_ID <- sapply(1:nrow(sels_mod), function(x){
+  spp <- strsplit(sels_mod$sound_files_mod[x], split = "_")[[1]][1]
+  tmp <- strsplit(sels_mod$sound_files_mod[x], split = "_")[[1]]
+  return(paste(tmp[5], strsplit(tmp[6], split = "\\.")[[1]][1], sep = "-"))
+})
+unique(bird_ID)
+
+# generate a unique call ID variable 
+call_ID <- sapply(1:nrow(sels_mod), function(x){
+  spp <- strsplit(sels_mod$sound_files_mod[x], split = "_")[[1]][1]
+  tmp <- strsplit(sels_mod$sound_files_mod[x], split = "_")[[1]]
+  return(strsplit(tmp[6], split = "\\.")[[1]][2])
+})
+unique(call_ID)
+
+sels_mod2 <- data.frame(sels_mod, site = site, bird_ID = bird_ID, call_ID = call_ID)
+# str(sels_mod2)
+
+write.csv(sels_mod2, file.path(path, "Selected_YNA_calls_28Oct18.csv"), row.names = FALSE)
+
+sels_table <- selection_table(sels_mod2, extended = TRUE, mar = 0.5, path = path)
+saveRDS(sels_table, file.path(path, "YNA_extended_selection_table.RDS"))
+
+```
+
+# Pre-process MNK Calls
+
+Set path for MNK calls.
+```{r echo = TRUE, eval = TRUE}
+
+path <- "/media/owner/MYIOPSITTA/R/Uruguay2017_MonkParakeet_CallAnalysis/Data/Focal_Individuals"
+
+```
+
+Read in the repeatedly sampled individual data set.
+```{r echo = TRUE, eval = TRUE}
+
+mnk <- read.csv(file.path(path, "indiv_scale_calls_preprocessed.csv"), header = TRUE)
+
+```
+
+Downsample MNK repeatedly sampled individual calls. See Supplementary Methods 1 for summary statistics of these calls.
+```{r echo = TRUE, eval = FALSE}
+
+# clip the selected calls from sound files, move to a folder called 22050
+cut_sels(mnk, mar = 0.01, parallel = 1, pb = TRUE, labels = c("sound.files", "selec"), overwrite = FALSE, path = path)
+
+# downsample MNK call cuts to 22.05kHz to match YNA sampling rate
+path <- "/media/owner/MYIOPSITTA/R/Uruguay2017_MonkParakeet_CallAnalysis/Data/YNA_published_data"
+wavs <- list.files(path = file.path(path, "22050"), pattern = "wav$")
+
+# if rerunning code after including site-level calls
+wavs <- wavs[grep("INDIV", wavs)]
+wavs <- wavs[-grep("buffered", wavs)]
+wavs
+
+# w <- 1
+invisible(lapply(1:length(wavs), function(w){
+  tuneR::writeWave(tuneR::downsample(object = tuneR::readWave(file.path(path, wavs[w])), samp.rate = 22050), filename = file.path(path, wavs[w]))
+}))
+
+# do a quick test, sampling rate has been lowered to 22050, good to go
+# readWave(wavs[1])
+
+# change sound file names accordingly
+mnk$sound.files <- wavs
+
+# make new temporal coordinates for selection table of clipped, downsampled MNK calls
+sels <- pblapply(1:length(wavs), function(w){
+  tmp <- readWave(file.path(path, wavs[w]))
+  samp_rate <- tmp@samp.rate
+  start <- 0
+  end <- duration(tmp)
+  return(data.frame(sound.files = wavs[w], selec = 1, start = start, end = end, samp_rate = samp_rate))
+})
+sels <- rbindlist(sels)
+# str(sels)
+
+# replace original temporal coordinates with those for the downsampled calls
+mnk$start <- sels$start
+mnk$end <- sels$end
+
+# add 0.5 seconds of silence before and after each call, to standaridize these calls to the YNA workflow above
+mnk$sound.files <- as.character(mnk$sound.files)
+sil <- 0.5
+
+# x <- 1 # testing
+mnk_list <- invisible(pblapply(1:nrow(mnk), function(x){
+  
+  # add silence before and after signal 
+  tmp <- seewave::addsilw(readWave(file.path(path, mnk$sound.files[x])), at = "start", d = sil, output = "Wave")
+  new_wav <- seewave::addsilw(tmp, at = "end", d = 0.5, output = "Wave")
+  
+  # write out new .wav file
+  fn <- mnk$sound.files[x]
+  fn <- paste(gsub(".wav", "", fn), "buffered.wav", sep = "_")
+  tuneR::writeWave(new_wav, file.path(path, fn), extensible = TRUE)
+  
+  # change the sound file name, start and end coordinates per selection
+  mnk$sound.files[x] <- fn
+  mnk$start[x] <- mnk$start[x] + sil
+  mnk$end[x] <- mnk$end[x] + sil
+  
+  return(mnk[x, ])
+  
+}))
+mnk_mod <- data.table::rbindlist(mnk_list)
+str(mnk_mod)
+
+# write out revised selection table
+write.csv(mnk_mod, file.path(path, "MNK_indiv_selection_table_22050_28Oct18.csv"), row.names = FALSE)
+
+sels_table <- selection_table(mnk_mod, extended = TRUE, mar = 0.5, path = path)
+saveRDS(sels_table, file.path(path, "MNK_indiv_extended_selection_table.RDS"))
+
+```
+
+Read in the higher social scales data set.
+```{r echo = TRUE, eval = TRUE}
+
+path <- "/media/owner/MYIOPSITTA/R/Uruguay2017_MonkParakeet_CallAnalysis/Data/Site_Recordings"
+
+mnk_sites <- read.csv(file.path(path, "higher_social_scales_calls_preprocessed_final.csv"), header = TRUE)
+
+```
+
+Downsample MNK site calls. See Supplementary Methods 1 for summary statistics of these calls.
+```{r echo = TRUE, eval = FALSE}
+
+# exclude the 7 calls for which a margin of 0.01 seconds on either side of the call overlapped with a neighboring call
+mnk_sites <- mnk_sites[-grep("^N$", mnk_sites$SNR_mar_works), ]
+nrow(mnk_sites)
+
+# clip the selected calls from sound files, move to the folder called 22050
+cut_sels(mnk_sites, mar = 0.01, parallel = cores, pb = TRUE, labels = c("sound.files", "selec"), overwrite = FALSE, path = path)
+
+# downsample MNK call cuts to 22.05kHz to match YNA sampling rate
+path <- "/media/owner/MYIOPSITTA/R/Uruguay2017_MonkParakeet_CallAnalysis/Data/YNA_published_data/22050"
+wavs <- list.files(path = path, pattern = "wav$")
+wavs <- wavs[grep("^2017_", wavs)]
+wavs <- wavs[-grep("INDIV", wavs)]
+wavs <- wavs[-grep("buffered", wavs)]
+length(wavs)
+
+# w <- 1
+invisible(lapply(1:length(wavs), function(w){
+  tuneR::writeWave(tuneR::downsample(object = tuneR::readWave(file.path(path, wavs[w])), samp.rate = 22050), filename = file.path(path, wavs[w]))
+}))
+
+# moved these files manually back to the main directory
+path <- "/media/owner/MYIOPSITTA/R/Uruguay2017_MonkParakeet_CallAnalysis/Data/YNA_published_data"
+
+# do a quick test, sampling rate has been lowered to 22050, good to go
+readWave(wavs[1])
+
+# change sound file names accordingly
+mnk_sites$sound.files <- wavs
+
+# make new temporal coordinates for selection table of clipped, downsampled MNK calls
+sels <- pblapply(1:length(wavs), function(w){
+  tmp <- readWave(file.path(path, wavs[w]))
+  samp_rate <- tmp@samp.rate
+  start <- 0
+  end <- duration(tmp)
+  return(data.frame(sound.files = wavs[w], selec = 1, start = start, end = end, samp_rate = samp_rate))
+})
+sels <- rbindlist(sels)
+# unique(sels$samp_rate)
+# str(sels)
+
+# replace original temporal coordinates with those for the downsampled calls
+mnk_sites$start <- sels$start
+mnk_sites$end <- sels$end
+str(mnk_sites)
+
+# add 0.5 seconds of silence before and after each call, to standaridize these calls to the YNA workflow above
+mnk_sites$sound.files <- as.character(mnk_sites$sound.files)
+sil <- 0.5
+
+# x <- 1 # testing
+mnk_sites_list <- invisible(pblapply(1:nrow(mnk_sites), function(x){
+  
+  # add silence before and after signal 
+  tmp <- seewave::addsilw(readWave(file.path(path, mnk_sites$sound.files[x])), at = "start", d = sil, output = "Wave")
+  new_wav <- seewave::addsilw(tmp, at = "end", d = 0.5, output = "Wave")
+  
+  # write out new .wav file
+  fn <- mnk_sites$sound.files[x]
+  fn <- paste(gsub(".wav", "", fn), "buffered.wav", sep = "_")
+  tuneR::writeWave(new_wav, file.path(path, fn), extensible = TRUE)
+  
+  # change the sound file name, start and end coordinates per selection
+  mnk_sites$sound.files[x] <- fn
+  mnk_sites$start[x] <- mnk_sites$start[x] + sil
+  mnk_sites$end[x] <- mnk_sites$end[x] + sil
+  
+  return(mnk_sites[x, ])
+  
+}))
+mnk_sites_mod <- data.table::rbindlist(mnk_sites_list)
+str(mnk_sites_mod)
+
+# write out revised selection table
+write.csv(mnk_sites_mod, file.path(path, "MNK_sites_selection_table_22050_28Oct18.csv"), row.names = FALSE)
+
+sels_table <- selection_table(mnk_sites_mod, extended = TRUE)
+saveRDS(sels_table, file.path(path, "MNK_site_extended_selection_table.RDS"))
+
+```
+
+# Selection Tables
+
+Read in selection tables for SPCC and random forests sound analysis. 
+```{r echo = TRUE, eval = TRUE}
+
+path <- "/media/owner/MYIOPSITTA/R/Uruguay2017_MonkParakeet_CallAnalysis/Data/YNA_published_data"
+
+# MNK individual scale
+mnk_indiv <- read.csv(file.path(path, "MNK_indiv_selection_table_22050_28Oct18.csv"), header = TRUE)
+
+# dim(mnk_indiv)
+
+# MNK site scale
+mnk_site <- read.csv(file.path(path, "MNK_sites_selection_table_22050_28Oct18.csv"), header = TRUE)
+
+# dim(mnk_site)
+
+# YNA
+yna_sels <- read.csv(file.path(path, "Selected_YNA_calls_28Oct18.csv"), header = TRUE)
+
+# subset the selection table by usable calls
+yna_sels <- yna_sels[yna_sels$Use_Status == "Y", ]
+
+yna <- droplevels(yna_sels[grep("YNA", yna_sels$sound.files), ])
+# dim(yna_sels)
+# nrow(yna)
+# str(yna)
+
+```
+
+## YNA Calls
+
+How many calls per individual for YNA?
+```{r echo = TRUE, eval = TRUE}
+
+# these were recorded during a single year, 1994
+yna_indiv_tbl <- table(yna$bird_ID)
+yna_indiv_tbl
+range(yna_indiv_tbl)
+
+```
+
+These calls were recorded over 14 sites.
+```{r echo = TRUE, eval = TRUE}
+
+# how many individuals?
+length(yna_indiv_tbl)
+
+```
+
+```{r echo = TRUE, eval = TRUE}
+
+# mean calls per individual?
+mean(yna_indiv_tbl)
+
+```
+
+```{r echo = TRUE, eval = TRUE}
+
+# range of calls per individual
+range(yna_indiv_tbl)
+
+```
+
+```{r echo = TRUE, eval = TRUE}
+
+# how many sites?
+yna_sites <- sapply(1:length(yna_indiv_tbl), function(x){
+  strsplit(names(yna_indiv_tbl)[x], split = "-")[[1]][1]
+})
+length(unique(yna_sites))
+
+```
+
+```{r echo = TRUE, eval = TRUE}
+
+# how many individuals per site?
+table(yna_sites)
+
+```
+
+```{r echo = TRUE, eval = TRUE}
+
+# total calls
+sum(yna_indiv_tbl)
+
+```
+
+# Optimizing Spectrogram Parameters
+
+We optimized spectrogram parameters per species prior to running SPCC. We visually evaluated the resulting spectrogram mosaic to choose the Fourier transform window type, window length and the partitioning of signal amplitude.
+```{r echo = TRUE, eval = FALSE}
+
+cores <- parallel::detectCores() - 2
+
+# pick a random call to generate a spectrogram mosaic with varying parameters
+
+# MNK
+set.seed(401)
+r <- sample(x = nrow(mnk_site), size = 1)
+
+spec_param(mnk_site[r, ], length.out = 10, ovlp = 90, wl = c(200, 600), wn = c("hanning", "bartlett", "hamming"),  collev.min = c(-40, -100), pal = "reverse.gray.colors.2", rm.axes = TRUE, nrow = 3, ncol = 3, img.suffix = "spec_param_mnk", flim = c(0.5, 9), mar = 0.03, cex = 0.45, path = path)
+
+catalog2pdf(keep.img = FALSE, parallel = cores, by.img.suffix = TRUE, path = path)
+
+# YNA
+set.seed(401)
+r <- sample(x = nrow(yna), size = 1)
+
+spec_param(yna[r, ], length.out = 10, ovlp = 90, wl = c(200, 600), wn = c("hanning", "bartlett", "hamming"),  collev.min = c(-40, -100), pal = "reverse.gray.colors.2", rm.axes = TRUE, nrow = 3, ncol = 3, img.suffix = "spec_param_yna", flim = c(0, 4), mar = 0.03, cex = 0.45, path = path)
+
+catalog2pdf(keep.img = FALSE, parallel = cores, by.img.suffix = TRUE, path = path)
+
+```
+
+We decided to proceed with the following spectrogram parameters after assessing spectrogram mosaics:
+
+*MNK: window length = 289, window type = hanning, collev.min = -40
+*YNA: window length = 378, window type = hanning, collev.min = -40
+
+Set common arguments for acoustic and image measurements.
+```{r, echo = TRUE, eval = TRUE}
+
+# Set cores for SPCC parallel processing if you have > 2 cores, otherwise set to 1 to avoid processing in parallel 
+cores <- parallel::detectCores() - 2
+
+spp <- c("MNK_indiv", "MNK_site", "YNA")
+sels_list <- list(mnk_indiv, mnk_site, yna)
+wl <- c(288, 288, 378) # wl must be an even number
+bp <- list(c(0.5, 9), c(0.5, 9), c(0, 4))
+prefix <- c("xc_mat", "sp_ts_DTW", "df_ts_DTW", "mDTW")
+type <- c("SPCC", "spDTW", "dfDTW", "multiDTW")
+as_nms <- c("SPCC", "Spectral_entropy_DTW", "Dominant_freq_DTW", "Multivariate_DTW")
+
+# set amplitude threshold for dtfs, threshold of 15 fails for YNA calls
+th <- c(rep(15, 2), 10)
+
+path <- "/media/owner/MYIOPSITTA/R/Uruguay2017_MonkParakeet_CallAnalysis/Data/YNA_published_data"
+
+```
+
+# SPCC
+```{r echo = TRUE, eval = FALSE}
+
+# x <- 1
+invisible(pblapply(1:length(spp), function(x){
+  
+  xc_mat_tmp <- warbleR::xcorr(sels_list[[x]], wl = wl[x], ovlp = 90, bp = bp[[x]], wn = "hanning", cor.method = "pearson", parallel = cores, na.rm = FALSE, frange = bp[[x]], cor.mat = TRUE, path = path)
+  
+  # SPCC matrices will be used in random forests analysis, as well as a separate measurement of acoustic similarity
+  saveRDS(xc_mat_tmp, file.path(path, paste(paste("xc_mat", spp[x], sep = "_"), ".RDS", sep = "")))
+  
+}))
+
+```
+
+# Random Forests
+
+We used random forests to predict acoustic similarity of YNA calls. We carried out a similar workflow as in Supplementary Methods 2. We collected a broad set of acoustic similarity and acoustic structure measurements, including image parameters. We then extracted MDS/PCA and t-Distributed Stochastic Neighbor Embedding (t-SNE)<a href='#References'><sup>[3;4]</sup></a> features from these measurements, and used these features to build random forests models per species. After model training, we used the best model per species to perform model validation and finally, to predict acoustic similarity of calls set aside for testing. 
+
+## Acoustic Similarity Measurements
+
+We had already collected SPCC acoustic similarity measurements above. We collected three additional acoustic similarity measurements based on dynamic time-warping (DTW): spectral entropy, dominant frequency and multivariate DTW, as per methods used in Supplementary Methods 2. We used the frequency bandpasses and the window lengths determined above per species.
+```{r echo = TRUE, eval = FALSE}
+
+invisible(pblapply(1:length(spp), function(x){
+  
+  cat(paste("Species = ", spp[x], "\n", sep = ""))
+  
+  ####### Spectral entropy DTW ####### 
+  
+  # extract spectral entropy across signals as a time series
+  sp_ts <- sp.en.ts(sels_list[[x]], wl = wl[x], length.out = 100, wn = "hanning", ovlp = 90, bp = bp[[x]], threshold = 15, img = TRUE, parallel = cores, img.suffix = "sp.en.ts", pb = TRUE, clip.edges = TRUE, leglab = "sp.en.ts", sp.en.range = bp[[x]], path = path)
+
+  # ensure that the selec column isn't included in dtw
+  sp_ts$selec <- as.character(sp_ts$selec)
+
+  # perform dynamic time warping (DTW) on spectral entropy time series
+  sp_ts_DTW <- dtw::dtwDist(sp_ts[, sapply(sp_ts, is.numeric)], sp_ts[, sapply(sp_ts, is.numeric)], window.type = "none", open.end = FALSE)
+  
+  saveRDS(sp_ts_DTW, file.path(path, paste(paste("sp_ts_DTW", spp[x], sep = "_"), ".RDS", sep = "")))
+          
+  ####### Dominant frequency DTW ####### 
+
+  # extract dominant frequency as a time series 
+  # some calls still have NA values at the end even with clip.edges, so generate a few extra df values
+  df_ts <- dfts(sels_list[[x]], wl = wl[x], wl.freq = wl[x], length.out = 115, wn = "hanning", ovlp = 90, bp = bp[[x]], threshold = th[x], img = TRUE, parallel = cores, img.suffix = "dfts", pb = TRUE, clip.edges = TRUE, path = path)
+
+  # clip down to 102 columns (2 metadata plus 100 time series) to remove NAs not removed by clip.edges
+  df_ts <- df_ts[, 1:102]
+
+  # checking for columns with NAs
+  # unlist(sapply(df_ts, function(x){
+  #   which(is.na(x))
+  # }))
+
+  # ensure that the selec column isn't included in dtw
+  df_ts$selec <- as.character(df_ts$selec)
+
+  # perform DTW on dominant frequency time series
+  df_ts_DTW <- dtw::dtwDist(df_ts[, sapply(df_ts, is.numeric)], df_ts[, sapply(df_ts, is.numeric)], window.type = "none", open.end = FALSE)
+
+  saveRDS(df_ts_DTW, file.path(path, paste(paste("df_ts_DTW", spp[x], sep = "_"), ".RDS", sep = "")))
+  
+  ####### Multivariate DTW ####### 
+  
+  # perform multivariate DTW on spectral entropy and dominant frequency time series
+
+  # check input dimensions for time series data
+  dim(sp_ts[, sapply(sp_ts, is.numeric)])
+  dim(df_ts[, sapply(df_ts, is.numeric)])
+
+  mDTW <- warbleR::multi_DTW(ts.df1 = sp_ts, ts.df2 = df_ts, parallel = cores, window.type = "none", open.end = FALSE, scale = TRUE, dist.mat = TRUE, path = path)
+  
+  saveRDS(mDTW, file.path(path, paste(paste("mDTW", spp[x], sep = "_"), ".RDS", sep = "")))
+  
+}))
+
+```
+
+## Acoustic Structure Measurements
+
+We collected other quantitative measurements that characterized contact call structure (measurements across the time, frequency and amplitude domains, including measurements on Mel-frequency cepstral coefficients), as per Supplementary Methods 2. We removed all estimates of fundamental frequency for YNA calls for consistency with MNK sound analysis in Supplementary Methods 2.
+```{r echo = TRUE, eval = FALSE}
+
+invisible(pblapply(1:length(spp), function(x){
+  
+  # calculate acoustic parameters across calls, excluding measurements related to harmonicity, e.g. fundamental frequency
+  # estimates of the fundamental frequency are not accurate, given previous exploratory analysis of acoustic parameters
+  sp_tmp <- warbleR::specan(sels_list[[x]], bp = bp[[x]], wl = wl[x], wl.freq = wl[x], ovlp = 90, fast = FALSE, parallel = cores, wn = "hanning", harmonicity = FALSE, path = path)
+
+  # make sure that the selections column is non-numeric and non-integer
+  sp_tmp$selec <- as.character(sp_tmp$selec)
+
+  # write out acoustic parameters
+  write.csv(sp_tmp, file.path(path, paste(paste("acoustic_parameters_specan", spp[x], sep = "_"), ".csv", sep = "")), row.names = FALSE)
+
+  # we also collected acoustic measurements on Mel-frequency cepstral coefficients
+  # we used the same numcep and nbands used for monk parakeet calls
+  cep_tmp <- warbleR::mfcc_stats(sels_list[[x]], ovlp = 90, wl = wl[x], bp = bp[[x]], numcep = 12, nbands = 40, parallel = cores, path = path)
+
+  cep_tmp$selec <- as.character(cep_tmp$selec)
+
+  # write out cepstral acousic parameters
+  write.csv(cep_tmp, file.path(path, paste(paste("acoustic_parameters_cepstral", spp[x], sep = "_"), ".csv", sep = "")), row.names = FALSE)
+  
+}))
+
+```
+
+We also used image processing software to derive image parameters that characterized acoustic structure. We ran the image-processing software WND-CHRM <a href='#References'><sup>[5]</sup></a> outside of R to measure several thousand image parameters across spectrograms. First, we made spectrograms for WND-CHRM to process.
+```{r echo = TRUE, eval = FALSE}
+
+# make spectrograms without labels (including axes) for image feature extraction by WND-CHRM, which takes only tiff or ppm files
+# manually moved image files into ~/img_processing subfolders per species 
+
+invisible(pblapply(1:length(spp), function(x){
+  
+  warbleR::specreator(sels_list[[x]], wn = "hanning", wl = wl[x], collev = seq(-40, 0, 1), flim = bp[[x]], ovlp = 90, line = FALSE, mar = 0.01, title = FALSE, res = 200, axisX = FALSE, axisY = FALSE, inner.mar = c(0,0,0,0), it = "tiff", parallel = cores, path = path)
+  
+}))
+
+```
+
+We ran WND-CHRM in a working directory that contained the spectrograms generated above, by executing the following code in a UNIX Bash shell: `wndchrm train -ml ./ feature_large_file.fit`. Among other parameters, the resulting data set included:
+
+* 64 Chebyshev features
+* 64 Chebyshev-Fourier features
+* 7 Gabor wavelet feature values
+* 48 Radon transform features
+* 144 Multi-scale histograms
+* 288 Four moment features
+* 36 Tamura features
+* 28 Edge statistics
+* 34 Object statistics
+* 312 Zernicke and Haralick features
+
+WND-CHARM originally included 1025 total image measurements<a href='#References'><sup>[5]</sup></a>. However, the software has since been updated to include more parameters. We generated 2919 total variables using the `-ml` flag.
+
+We read in the resulting .fit file for preprocessing prior to feature extraction.
+```{r echo = TRUE, eval = FALSE}
+
+invisible(pblapply(1:length(spp), function(x){
+  
+  path <- file.path(path, paste("img_processing", tolower(spp[x]), sep = "_"))
+  
+  # read in the resulting. fit file
+  # the 1st 3 lines are a header
+  fitf_tmp <- readLines(file.path(path, paste(paste("feature_large_file", spp[x], sep = "_"), ".fit", sep = "")))[-c(1:3)]
+  # str(fitf_tmp)
+
+  # column names
+  length(grep("\\[", fitf_tmp)) # 2919 or 1059 if large or small parameter run
+  cnms <- fitf_tmp[grep("\\[", fitf_tmp)]
+  # str(cnms)
+
+  # fix column names
+  cnms <- gsub(" ", "", cnms, fixed = TRUE)
+  cnms <- gsub(")", "", cnms, fixed = TRUE)
+  cnms <- gsub("(", "", cnms, fixed = TRUE)
+  cnms <- gsub("[", "_", cnms, fixed = TRUE)
+  cnms <- gsub("]", "", cnms, fixed = TRUE)
+  # cnms[1:10]
+
+  # generate row names (spectrogram image file names)
+  # should have the same number of rows as calls
+  # length(grep(".tiff$", readLines(file.path(path, paste(paste("feature_large_file", tolower(spp[x]), sep = "_"), ".fit", sep = "")))))
+  rnms <- fitf_tmp[grep(".tiff$", fitf_tmp)]
+
+  # x <- 1
+  rnms <- sapply(1:length(rnms), function(x){
+    gsub(".tiff", "", strsplit(rnms[x], split = "./")[[1]][2])
+  })
+  # str(rnms)
+
+  # extract data, has one extra line
+  # length(grep("\\[|.tiff$", fitf_yna, invert = TRUE))
+  dats <- fitf_tmp[grep("\\[|.tiff$", fitf_tmp, invert = TRUE)]
+  
+  # remove any lines that are just a space
+  dats <- dats[!dats == ""]
+  # str(dats)
+
+  # split the values by space
+  # x <- 1
+  dats <- sapply(1:length(dats), function(x){
+    as.numeric(strsplit(dats[x], split = " ")[[1]])
+  })
+  # str(dats)
+  # there are 2920 data points but only 2919 variables names
+
+  # recreate the fit file information as a data frame
+  fit_df <- data.frame(call_ID = rnms, t(dats))
+  names(fit_df) <- c("call_ID", cnms)
+  # str(fit_df)
+
+  # the very last value (which is a 0), does not exist in the original sig file, so remove this column from fit_df to obtain the original number of parameters 
+  fit_df <- fit_df[, -2921]
+  # str(fit_df)
+  # dim(fit_df)
+  # names(fit_df)[1:10]
+
+  # write out image parameters for later
+  path <- "/media/owner/MYIOPSITTA/R/Uruguay2017_MonkParakeet_CallAnalysis/Data/YNA_published_data"
+  
+  write.csv(fit_df, file.path(path, paste(paste("img_parameters_large", spp[x], sep = "_"), ".csv", sep = "")), row.names = FALSE)
+  
+}))
+
+```
+
+## MDS and PCA Feature Extraction
+
+We extracted acoustic and image features from the acoustic similarity and structure measurements generated above, as per monk parakeet calls in Supplementary Methods 2: Sound Analysis. Here we used Multidimensional Scaling (MDS) for matrices of pairwise acoustic similarity, or Principal Components Analysis (PCA) for all other acoustic and image parameters as feature extraction methods.
+
+Read back in acoustic similarity measurements.
+```{r echo = TRUE, eval = FALSE}
+
+# read in data sets as distance objects in a loop
+asim_list <- invisible(pblapply(1:length(spp), function(x){
+  lapply(1:length(type), function(y){
+    
+    # convert SPCC correlation (e.g. proximity) values to distance values
+    if(type[y] == "SPCC"){
+      tmp <- stats::as.dist(file.path(path, readRDS(paste(paste(prefix[y], spp[x], sep = "_"), ".RDS", sep = ""))))
+      return(1 - tmp)
+    
+    # DTW matrices already contain distance values
+    } else if(type[y] != "SPCC"){
+      stats::as.dist(file.path(path, readRDS(paste(paste(prefix[y], spp[x], sep = "_"), ".RDS", sep = ""))))
+    }
+    
+  })
+}))
+# str(asim_list)
+
+# add names to list for easier parsing
+names(asim_list) <- spp
+invisible(sapply(1:length(spp), function(x){
+  names(asim_list[[x]]) <- type
+}))
+
+```
+
+```{r echo = FALSE, eval = TRUE}
+
+dims <- seq(2, 25, 1)
+
+```
+
+We began with MDS feature extraction. We worked out a routine to choose an adequate MDS method and number of dimensions per parameter set by optimizing MDS stress. 
+```{r echo = TRUE, eval = FALSE}
+
+dims <- seq(2, 25, 1)
+
+stress <- invisible(pblapply(1:length(spp), function(x){
+  stress <- lapply(1:length(type), function(y){
+  stress <- lapply(1:length(dims), function(z){
+    
+    # these MDS methods calculate stress differently
+    # sammon MDS documentation states it is nonmetric but other sources indicate it is in fact metric
+    iso <- invisible(MASS::isoMDS(asim_list[[x]][[y]], k = dims[z], maxit = 1000, trace = FALSE))
+    sam <- invisible(MASS::sammon(asim_list[[x]][[y]], k = dims[z], niter = 1000, trace = FALSE))
+  
+    # isoMDS returns stress as a percentage
+    return(data.frame(k = dims[z], stress = c(iso$stress/100, sam$stress), mds_type = c("isoMDS", "sammon"), species = spp[x], type = type[[y]]))
+    })
+    return(rbindlist(stress))
+  })
+  return(rbindlist(stress))
+}))
+
+stress <- rbindlist(stress)
+stress <- data.frame(stress)
+str(stress)
+
+saveRDS(stress, file.path(path, "MDS_stress_2spp.RDS"))
+
+```
+
+```{r echo = TRUE, eval = TRUE}
+
+stress <- readRDS(file.path(path, "MDS_stress_2spp.RDS"))
+
+```
+
+#### Figure S4.1: MDS Stress
+
+We chose an MDS procedure by comparing MDS stress. Lower stress is preferable, and we used an stress value of 0.05 as a general rule-of-thumb for low stress. isoMDS minimized stress better than sammon MDS (stress decreased more evenly over dimensions). We chose the number of dimensions that best minimized isoMDS stress per species.
+```{r echo = TRUE, eval = TRUE, dpi = 100, fig.width = 8, fig.height = 12}
+
+# isoMDS is a better MDS method across feature data 
+# jpeg("MDS_stress.jpeg", units = "mm", width = 180, height = 120, res = 300)
+
+ggplot(stress, aes(x = k, y = stress)) + 
+  geom_point(aes(fill = mds_type, color = mds_type), shape = 21, size = 1) +
+  facet_grid(rows = vars(type), cols = vars(species)) +
+  geom_line(aes(group = mds_type, color = mds_type)) +
+  geom_hline(aes(yintercept = 0.05), linetype = "dashed", color = "black", size = 0.25) +
+  xlab("MDS Dimensions") + ylab("Stress") +
+  scale_x_continuous(breaks = seq(min(dims), max(dims), 5), labels = seq(min(dims), max(dims), 5)) +
+  scale_y_continuous(breaks = seq(0, 0.4, 0.05), labels = seq(0, 0.4, 0.05)) +
+  theme(panel.background = element_rect(fill = "white"), plot.background = element_rect(fill = "white"), 
+        panel.grid.major = element_line(size = 1, colour = "white"), 
+        panel.grid.minor = element_line(size = 0.75, colour = "white"), 
+        axis.line = element_line(size = 0.45, colour = "black"), 
+        axis.title = element_text(size = 10), 
+        axis.text = element_text(size = 8), strip.text.x = element_text(size = 8), legend.position = "top")
+
+
+```
+
+isoMDS performs better with respect to the Sammon's method. We identified the optimal number of isoMDS dimensions per species and acoustic similarity method.
+```{r echo = TRUE, eval = TRUE}
+
+stress <- stress[grep("isoMDS", stress$mds_type), ]
+
+tapply(stress$stress, list(stress$species, stress$type), function(x){
+  stress$k[which(abs(x - 0.05) == min(abs(x - 0.05)))]
+})
+
+```
+
+We ground-truthed the isoMDS optimization by plotting the optimal isoMDS features per acoustic similarity method. We prepared visualizations for feature extraction using primarily individual identity, and then site identity, to examine how well each method grouped calls by individual and/or site. We used the focal individual data set only for MNK. For MNK, we did not expect to see much grouping by site, but rather overdispersion within sites, and better clustering by individual identity. For YNA, we expected to see calls cluster by individual, site and dialect identity (we picked sites representing different dialects). 
+```{r echo = TRUE, eval = TRUE}
+
+# randomly select 8 individuals over 2 sites per species for visualization
+# ensure that each individual chosen has at least 3 calls
+
+######## MNK individuals ########
+# we used all 8 focal individuals for MNK
+unique(mnk_indiv$site)
+table(mnk_indiv$indiv)
+
+# add bird_ID to mnk
+mnk_indiv$bird_ID <- paste(mnk_indiv$site, mnk_indiv$indiv, sep = "-")
+
+mnk_indivs <- unique(as.character(mnk_indiv$bird_ID))
+
+######## MNK sites ########
+unique(mnk_site$General_site)
+
+# add a site column and bird_ID column to the full mnk_site metadata
+names(mnk_site)[grep("General_site", names(mnk_site))] <- "site"
+
+# x <- 1
+mnk_site$bird_ID <- unlist(lapply(1:length(unique(mnk_site$site)), function(x){
+  tmp_site <- mnk_site$site[grep(unique(mnk_site$site)[x], mnk_site$site)]
+  paste(tmp_site, seq(1, length(tmp_site), 1), sep = "-")
+}))
+
+# filter by 4 individuals in each of 2 sites used for MNK site visualizations in Supplementary Methods 2
+tmp <- mnk_site[grep("PIED|OJOS", mnk_site$site), ]
+
+# checking 
+table(tmp$bird_ID)
+
+set.seed(401)
+r <- sample(1:length(unique(tmp$bird_ID)), size = 8, replace = FALSE)
+
+mnk_site_indivs <- unique(as.character(tmp$bird_ID))[r]
+
+######## YNA ########
+# ensure the sites picked for YNA represent different dialects
+unique(yna$site)
+tmp <- yna[grep("inoc|baju", yna$site), ]
+tmp <- droplevels(tmp[grep(paste(paste("^", names(which(table(tmp$bird_ID) > 2)), "$", sep = ""), collapse = "|"), tmp$bird_ID), ])
+
+# checking 
+table(tmp$bird_ID)
+
+set.seed(401)
+r <- sample(1:length(unique(tmp$bird_ID)), size = 8, replace = FALSE)
+
+yna_indivs <- unique(as.character(tmp$bird_ID))[r] 
+
+```
+
+```{r echo = TRUE, eval = FALSE}
+
+# collate individuals
+indivs <- list(mnk_indivs, mnk_site_indivs, yna_indivs)
+names(indivs) <- c("MNK_indiv", "MNK_site", "YNA")
+
+saveRDS(indivs, file.path(path, "indivs_plotting.RDS"))
+
+```
+
+```{r echo = TRUE, eval = FALSE}
+
+# isoMDS dimensions by species and acoustic similarity method
+dims <- list(c(13, 13, 17, 23), c(25, 22, 25, 25), c(24, 17, 25, 25))
+
+# metadata
+dfs <- list(mnk_indiv, mnk_site, yna)
+names(dfs) <- spp
+
+# read in individuals to be used for plotting
+indivs <- readRDS(file.path(path, "indivs_plotting.RDS"))
+
+# x <- 1 # testing
+# y <- 1
+isoMDS_RFfeats <- invisible(pblapply(1:length(spp), function(x){
+  tmp <- lapply(1:length(as_nms), function(y){
+    
+    dats <- readRDS(file.path(path, paste(paste(prefix[y], spp[x], sep = "_"), ".RDS", sep = "")))
+    
+    if(grepl("SPCC", as_nms[y])){
+      dats <- stats::as.dist(1 - dats, diag = TRUE, upper = FALSE)
+    } else if(!grepl("SPCC", as_nms[y])){
+      dats <- stats::as.dist(dats, diag = TRUE, upper = FALSE)
+    }
+    
+    iso <- invisible(MASS::isoMDS(dats, k = dims[[x]][y], maxit = 1000, trace = TRUE))
+
+    return(iso$points)
+  
+  })
+  
+  names(tmp) <- type
+  return(tmp)
+  
+}))
+
+names(isoMDS_RFfeats) <- spp
+str(isoMDS_RFfeats)
+
+# save the list as an RDS object
+saveRDS(isoMDS_RFfeats, file.path(path, "RFfeats_isoMDS_2spp.RDS"))
+
+```
+
+```{r echo = TRUE, eval = TRUE}
+
+isoMDS_RFfeats <- readRDS(file.path(path, "RFfeats_isoMDS_2spp.RDS"))
+
+dims <- list(c(13, 13, 17, 23), c(25, 22, 25, 25), c(24, 17, 25, 25))
+
+# metadata
+dfs <- list(mnk_indiv, mnk_site, yna)
+names(dfs) <- spp
+
+# read in individuals to be used for plotting
+indivs <- readRDS(file.path(path, "indivs_plotting.RDS"))
+
+```
+
+#### Figure S4.2: MDS Features
+
+```{r echo = TRUE, eval = TRUE, dpi = 100, message = FALSE, warning = FALSE}
+
+invisible(pblapply(1:length(spp), function(x){
+  lapply(1:length(as_nms), function(y){
+    
+    iso <- isoMDS_RFfeats[[x]][[y]]
+    
+    # filter metadata for plotting 
+    metadats <- dfs[[grep(spp[x], names(dfs), ignore.case = TRUE)]]
+        
+    tmp_indivs <- indivs[[grep(spp[x], names(indivs), ignore.case = TRUE)]]
+
+    # create a data frame with MDS embeddings for plotting
+    df <- data.frame(X = iso[, 1], Y = iso[, 2], indiv = as.character(metadats$bird_ID), site = as.character(metadats$site))
+    # str(df)
+
+    # filter by individuals
+    df <- droplevels(df[grep(paste(paste("^", tmp_indivs, "$", sep = ""), collapse = "|"), df$indiv), ])
+  
+    # aesthetics by individual
+    sts <- unique(as.character(df$site))
+    ins <- unique(as.character(df$indiv))
+    cols <- c("#F8766D", "#00BFC4", grey.colors(12)[3])
+
+    plot_cols <- unlist(lapply(1:length(sts), function(s){
+      rep(cols[s], length(ins[grep(sts[s], ins)]))
+    }))
+
+    # if MNK_site
+    if(grepl("site", spp[x])){
+      
+      # convex hull polygons by site
+      hulls <- plyr::ddply(df, "site", function(z){
+        z[chull(z$X, z$Y), ]
+      })
+      
+    } else if(!grepl("site", spp[x])){ 
+    
+      # convex hull polygons by individual
+      hulls <- plyr::ddply(df, "indiv", function(z){
+        z[chull(z$X, z$Y), ]
+      })
+    }
+  
+    # make graphic
+    gg <- ggplot(df, aes(x = X, y = Y))
+  
+    if(grepl("site", spp[x])){
+      
+     gg <- gg + geom_point(aes(color = site, fill = site, shape = site), size = 4) + 
+    
+      geom_polygon(data = hulls, aes(x = X, y = Y, fill = site, color = site), alpha = 0.2)
+
+    } else if(!grepl("site", spp[x])){ 
+      
+     gg <- gg + geom_point(aes(color = indiv, fill = indiv, shape = indiv), size = 4) + 
+      geom_polygon(data = hulls, aes(x = X, y = Y, fill = indiv, color = indiv), alpha = 0.2) +
+    
+      scale_colour_manual(values = plot_cols) + scale_fill_manual(values = plot_cols) +
+      scale_shape_manual(values = c(0, 1, 2, 4, 21, 22, 8, 24))
+      
+    }
+    
+   gg <- gg + xlab("MDS Dimension 1") + ylab("MDS Dimension 2") + 
+    theme_AcousticSpace() +
+    ggtitle(paste(paste(spp[x], as_nms[y], sep = " - "), "; ", dims[[x]][y], " dims, 1000 reps", sep = ""))
+
+    print(gg)
+    
+  })
+}))
+
+
+```
+
+The isoMDS feature optimization looks good.
+
+We used PCA to extract features from the acoustic and image measurement data sets that characterized acoustic structure. 
+```{r echo = TRUE, eval = TRUE}
+
+# new parameters
+prefix <- c("acoustic_parameters_specan", "acoustic_parameters_cepstral", "img_parameters_large")
+pca_nms <- c("Specan_parameters", "Mel-frequency_cepstral_parameters", "Image_parameters")
+type <- c("asp_params", "cep_params", "img_params")
+
+# metadata
+dfs <- list(mnk_indiv, mnk_site, yna)
+names(dfs) <- spp
+
+# read in individuals to be used for plotting
+indivs <- readRDS(file.path(path, "indivs_plotting.RDS"))
+
+```
+
+```{r echo = TRUE, eval = FALSE}
+
+# x <- 2 # testing
+# y <- 1
+PCA_RFfeats <- invisible(pblapply(1:length(spp), function(x){
+  tmp <- lapply(1:length(pca_nms), function(y){
+    
+    dats <- read.csv(file.path(path, paste(paste(prefix[y], spp[x], sep = "_"), ".csv", sep = "")), header = TRUE)
+    
+    # make sure selection IDs will not be confused for numeric variables
+    if(!grepl("Image", pca_nms[y])) dats$selec <- as.character(dats$selec)
+    
+    # some image parameters have NAs that cause prcomp to fail, find and remove these
+    if(grepl("Image", pca_nms[y])){
+     
+      nas <- sapply(1:nrow(dats), function(x){
+      which(is.na(dats[x, ]))
+      })
+      nas <- unique(unlist(nas)) # 3 variables
+
+      dats <- dats[, -nas]
+      dim(dats)
+
+    }
+    
+    pp_list <- caret::preProcess(dats, method = c("YeoJohnson", "zv", "nzv", "center", "scale"), thresh = 0.98, freqCut = 98/2, uniqueCut = 2)
+
+    pp_sp <- predict(pp_list, dats)
+
+    # perform PCA with base package for easier access of summary and loadings
+    pp_sp_pca <- stats::prcomp(pp_sp[, sapply(pp_sp, is.numeric)], center = FALSE)
+    # str(pp_sp_pca)
+
+    # importance of PCs, the first two explain about 47% of variance
+    # summary(pp_sp_pca)
+
+    # PCA loadings across original variables
+    # pp_sp_pca$rotation
+    
+    # return the whole pca object to examine summary and loadings later as needed
+    return(pp_sp_pca)
+    
+  })
+
+  names(tmp) <- type
+  return(tmp)
+}))
+
+names(PCA_RFfeats) <- spp
+str(PCA_RFfeats)
+
+# save the list as an RDS object
+saveRDS(PCA_RFfeats, file.path(path, "PCA_RFfeats_2spp.RDS"))
+
+```
+
+```{r echo = TRUE, eval = TRUE}
+
+PCA_RFfeats <- readRDS(file.path(path, "PCA_RFfeats_2spp.RDS"))
+
+```
+
+#### Figure S4.3: PCA Features
+
+```{r echo = TRUE, eval = TRUE, dpi = 100, message = FALSE, warning = FALSE}
+
+invisible(pblapply(1:length(spp), function(x){
+  lapply(1:length(pca_nms), function(y){
+    
+    pp_pca <- PCA_RFfeats[[x]][[y]]
+    
+    # filter metadata for plotting 
+    metadats <- dfs[[grep(spp[x], names(dfs), ignore.case = TRUE)]]
+    tmp_indivs <- indivs[[grep(spp[x], names(indivs), ignore.case = TRUE)]]
+
+    # create a data frame with PCA embeddings for plotting
+    df <- data.frame(X = pp_pca$x[, 1], Y = pp_pca$x[, 2], indiv = as.character(metadats$bird_ID), site = as.character(metadats$site))
+    # str(df)
+
+    # filter by individuals
+    df <- droplevels(df[grep(paste(paste("^", tmp_indivs, "$", sep = ""), collapse = "|"), df$indiv), ])
+  
+    # aesthetics by individual
+    sts <- unique(as.character(df$site))
+    ins <- unique(as.character(df$indiv))
+    cols <- c("#F8766D", "#00BFC4", grey.colors(12)[3])
+
+    plot_cols <- unlist(lapply(1:length(sts), function(s){
+      rep(cols[s], length(ins[grep(sts[s], ins)]))
+    }))
+
+    # if MNK_site
+    if(grepl("site", spp[x])){
+      
+      # convex hull polygons by site
+      hulls <- plyr::ddply(df, "site", function(z){
+        z[chull(z$X, z$Y), ]
+      })
+      
+    } else if(!grepl("site", spp[x])){ 
+    
+      # convex hull polygons by individual
+      hulls <- plyr::ddply(df, "indiv", function(z){
+        z[chull(z$X, z$Y), ]
+      })
+    }
+  
+    # make graphic
+    gg <- ggplot(df, aes(x = X, y = Y))
+  
+    if(grepl("site", spp[x])){
+      
+     gg <- gg + geom_point(aes(color = site, fill = site, shape = site), size = 4) + 
+    
+      geom_polygon(data = hulls, aes(x = X, y = Y, fill = site, color = site), alpha = 0.2)
+ 
+    } else if(!grepl("site", spp[x])){ 
+      
+     gg <- gg + geom_point(aes(color = indiv, fill = indiv, shape = indiv), size = 4) + 
+      geom_polygon(data = hulls, aes(x = X, y = Y, fill = indiv, color = indiv), alpha = 0.2) +
+    
+      scale_colour_manual(values = plot_cols) + scale_fill_manual(values = plot_cols) +
+      scale_shape_manual(values = c(0, 1, 2, 4, 21, 22, 8, 24))
+      
+    }
+
+   gg <- gg + xlab("PCA Dimension 1") + ylab("PCA Dimension 2") + 
+    theme_AcousticSpace() +
+    ggtitle(paste(spp[x], pca_nms[y], sep = " - "))
+
+    print(gg)
+    
+  })
+  
+}))  
+
+```
+
+The PCA features also look good. MNK individuals show more separation by Mel-frequency cepstral coefficients. There is a lot of separation among PIED and OJOS calls for some parameters, but this was using a subset of calls per site. YNA calls grouped by sites (representative of dialects).
+
+How many Principal Components were extracted per parameter type across species?
+```{r echo = TRUE, eval = TRUE}
+
+lapply(1:length(PCA_RFfeats), function(x){
+  unlist(lapply(1:length(type), function(y){
+    ncol(PCA_RFfeats[[x]][[y]]$x)
+  }))
+})
+
+```
+
+### t-SNE Feature Extraction
+
+We assessed t-SNE as an additional feature extraction method for all acoustic similarity and structure measurements. t-SNE is a machine learning approach used to reduce high-dimensional data and under some conditions, can be more effective at pulling out clustering patterns than PCA (also an unsupervised machine learning approach) <a href='#References'><sup>[3;4]</sup></a>. t-SNE involves optimization of the perplexity parameter (related to the number of nearest neighbors per point), which van der Maaten suggests should range from 5 - 50 (see http://lvdmaaten.github.io/tsne/). We optimized t-SNE for input into subsequent machine learning analysis, to determine whether this method would provide improved learning of acoustic similarity compared to MDS and PCA derived features. t-SNE can effectively embed in 2 or 3 dimensions. 
+
+We optimized t-SNE perplexity across species/social scales using SPCC.
+```{r echo = TRUE, eval = FALSE}
+
+# x <- 2 # testing
+# p <- 1
+tsne_opt <- invisible(pblapply(1:length(spp), function(x){
+  
+    spcc <- readRDS(file.path(path, paste(paste("xc_mat", spp[x], sep = "_"), ".RDS", sep = "")))
+    
+    # make a distance matrix
+    xcdist <- stats::as.dist(1 - spcc, diag = TRUE, upper = FALSE)
+    
+    # initialize perplexity values for optimization
+    if(grepl("MNK_indiv", spp[x])){
+      n <- (nrow(xcdist) - 1)/3
+      plx <- floor(seq(15, n, n/5))
+      plx
+      
+    } else if(!grepl("MNK_indiv", spp[x])){
+      plx <- floor(seq(15, 50, 10))
+      plx
+    }
+  
+    tmp_tsne <- lapply(1:length(plx), function(p){
+  
+    # run tsne 10 times for the given perplexity and select the iteration with the lowest final value of Kullback-Leibler divergence (last value of $ itercosts in the result, as the result is ordered)
+    tmp <- list()
+    tmp <- lapply(1:10, function(n){
+      Rtsne::Rtsne(xcdist, dims = 3, pca = FALSE, max_iter = 5000, perplexity = plx[p], is_distance = TRUE, theta = 0.0)
+    })
+    # str(tmp)
+  
+    KL <- sapply(1:length(tmp), function(i){
+      tmp[[i]]$itercosts[100]
+    }, simplify = TRUE)
+  
+    # overwrite tmp with the solution that minimized KL
+    tmp <- tmp[[which(KL == min(KL))]]
+    return(tmp)
+
+    })
+    names(tmp_tsne) <- plx
+    return(tmp_tsne)
+}))
+
+names(tsne_opt) <- spp
+saveRDS(tsne_opt, file.path(path, "tsne_opt_2spp.RDS"))
+
+```
+
+Read back in the t-SNE optimization results and plot.
+```{r echo = TRUE, eval = TRUE}
+
+tsne_opt <- readRDS(file.path(path, "tsne_opt_2spp.RDS"))
+
+```
+
+#### Figure S4.4: t-SNE Optimization
+
+```{r echo = TRUE, eval = TRUE, dpi = 100}
+
+invisible(pblapply(1:length(spp), function(x){
+  
+  tsne <- tsne_opt[[x]]
+  
+  spcc <- readRDS(file.path(path, paste(paste("xc_mat", spp[x], sep = "_"), ".RDS", sep = "")))
+    
+    # make a distance matrix
+    xcdist <- stats::as.dist(1 - spcc, diag = TRUE, upper = FALSE)
+    
+    # initialize perplexity values used for optimization
+    if(grepl("MNK_indiv", spp[x])){
+      n <- (nrow(xcdist) - 1)/3
+      plx <- floor(seq(15, n, n/5))
+      
+    } else if(!grepl("MNK_indiv", spp[x])){
+      plx <- floor(seq(15, 50, 10))
+    }
+  
+  # filter metadata for plotting 
+  metadats <- dfs[[grep(spp[x], names(dfs), ignore.case = TRUE)]]
+  tmp_indivs <- indivs[[grep(spp[x], names(indivs), ignore.case = TRUE)]]
+
+  lapply(1:length(plx), function(p){
+
+    # create a data frame with t-SNE embeddings for plotting
+    df <- data.frame(X = tsne[[p]]$Y[, 1], Y = tsne[[p]]$Y[, 2], indiv = as.character(metadats$bird_ID), site = as.character(metadats$site))
+    # str(df)
+
+    # filter by individuals
+    df <- droplevels(df[grep(paste(paste("^", tmp_indivs, "$", sep = ""), collapse = "|"), df$indiv), ])
+  
+    # aesthetics by individual
+    sts <- unique(as.character(df$site))
+    ins <- unique(as.character(df$indiv))
+    cols <- c("#F8766D", "#00BFC4", grey.colors(12)[3])
+
+    plot_cols <- unlist(lapply(1:length(sts), function(s){
+      rep(cols[s], length(ins[grep(sts[s], ins)]))
+    }))
+
+    # if MNK_site
+    if(grepl("site", spp[x])){
+      
+      # convex hull polygons by site
+      hulls <- plyr::ddply(df, "site", function(z){
+        z[chull(z$X, z$Y), ]
+      })
+      
+    } else if(!grepl("site", spp[x])){ 
+    
+      # convex hull polygons by individual
+      hulls <- plyr::ddply(df, "indiv", function(z){
+        z[chull(z$X, z$Y), ]
+      })
+    }
+  
+    # make graphic
+    gg <- ggplot(df, aes(x = X, y = Y))
+  
+    if(grepl("site", spp[x])){
+      
+     gg <- gg + geom_point(aes(color = site, fill = site, shape = site), size = 4) + 
+    
+      geom_polygon(data = hulls, aes(x = X, y = Y, fill = site, color = site), alpha = 0.2)
+      
+    } else if(!grepl("site", spp[x])){ 
+      
+     gg <- gg + geom_point(aes(color = indiv, fill = indiv, shape = indiv), size = 4) + 
+      geom_polygon(data = hulls, aes(x = X, y = Y, fill = indiv, color = indiv), alpha = 0.2) +
+    
+      scale_colour_manual(values = plot_cols) + scale_fill_manual(values = plot_cols) +
+      scale_shape_manual(values = c(0, 1, 2, 4, 21, 22, 8, 24))
+      
+    }
+
+   gg <- gg + xlab("t-SNE Dimension 1") + ylab("t-SNE Dimension 2") + 
+    theme_AcousticSpace() +
+    ggtitle(paste(spp[x], " SPCC", "t-SNE perplexity = ", plx[p], sep = " "))
+
+    print(gg)
+  
+  })
+
+}))
+
+```
+
+Perplexity of 21, 45 and 45 work well for MNK_indiv, MNK_site and YNA, respectively. We extracted t-SNE features for all acoustic similarity and structure measurements, using the optimized perplexity values and number of iterations determined with the SPCC data set. 
+```{r echo = FALSE, eval = TRUE}
+
+prefix <- c("xc_mat", "sp_ts_DTW", "df_ts_DTW", "mDTW", "acoustic_parameters_specan", "acoustic_parameters_cepstral", "img_parameters_large")
+nms <- c("SPCC", "Spectral_entropy_DTW", "Dominant_freq_DTW", "Multivariate_DTW", "Specan_parameters", "Mel-frequency_cepstral_parameters", "Image_parameters")
+type <- c("SPCC", "spDTW", "dfDTW", "multiDTW", "asp_params", "cep_params", "img_params")
+plx <- c(21, 45, 45)
+
+# metadata
+dfs <- list(mnk_indiv, mnk_site, yna)
+names(dfs) <- spp
+
+# read in individuals to be used for plotting
+indivs <- readRDS(file.path(path, "indivs_plotting.RDS"))
+
+```
+
+```{r echo = TRUE, eval = FALSE}
+
+RFtsne_feats <- invisible(pblapply(1:length(spp), function(x){
+  tmp_tsne <- lapply(1:length(nms), function(y){
+    
+    if(grepl("SPCC|DTW", nms[y])){
+      dats <- readRDS(file.path(path, paste(paste(prefix[y], spp[x], sep = "_"), ".RDS", sep = "")))
+    } else if(!grepl("SPCC|DTW", nms[y])){
+      dats <- read.csv(file.path(path, paste(paste(prefix[y], spp[x], sep = "_"), ".csv", sep = "")), header = TRUE)
+    }
+    
+    # make distances matrices as appropriate
+    if(grepl("SPCC", nms[y])){
+      X <- stats::as.dist(1 - dats, diag = TRUE, upper = FALSE)
+      is_distance <- TRUE
+    } else if(grepl("DTW", nms[y])){
+      X <- stats::as.dist(dats, diag = TRUE, upper = FALSE)
+      is_distance <- TRUE
+      
+      # For tabular acoustic and image parameters, make sure selection IDs will not be confused for numeric variables, and select only nuemric variables
+    } else if(grepl("Specan|Mel-f", nms[y])){
+      dats$selec <- as.character(dats$selec)
+      dats <- dats[, sapply(dats, is.numeric)]
+      is_distance <- FALSE
+    }
+    
+    # some image parameters have NAs that cause prcomp to fail, find and remove these
+    if(grepl("Image", nms[y])){
+     
+      nas <- sapply(1:nrow(dats), function(x){
+      which(is.na(dats[x, ]))
+      })
+      nas <- unique(unlist(nas)) # 3 variables
+
+      dats <- dats[, -nas]
+      # dim(dats)
+
+    }
+    
+    # Pre-process tabular acoustic and image parameters
+    if(grepl("Specan|Mel-f|Image", nms[y])){
+      pp_list <- caret::preProcess(dats, method = c("YeoJohnson", "zv", "nzv", "center", "scale"), thresh = 0.98, freqCut = 98/2, uniqueCut = 2)
+
+      X <- predict(pp_list, dats)
+    }
+    
+    # run tsne 10 times for the given perplexity and select the iteration with the lowest final value of Kullback-Leibler divergence (last value of $ itercosts in the result, as the result is ordered)
+    tmp <- list()
+    tmp <- lapply(1:10, function(n){
+      Rtsne::Rtsne(X, dims = 3, pca = FALSE, max_iter = 5000, perplexity = plx[x], is_distance = is_distance, theta = 0.0)
+    })
+    # str(tmp)
+    
+    cat(paste("spp = ", spp[x], " param = ", type[y], "\n", sep = ""))
+  
+    KL <- sapply(1:length(tmp), function(i){
+      tmp[[i]]$itercosts[100]
+    }, simplify = TRUE)
+  
+    # overwrite tmp with the solution that minimized KL
+    tmp <- tmp[[which(KL == min(KL))]]
+    return(tmp)
+
+    })
+    names(tmp_tsne) <- type
+    return(tmp_tsne)
+}))
+
+names(RFtsne_feats) <- spp
+saveRDS(RFtsne_feats, file.path(path, "RFtsne_feats_2spp.RDS"))
+
+```
+
+We generated visuals of t-SNE features across acoustic similarity and structure measurements to ground-truth the t-SNE features. 
+```{r echo = TRUE, eval = TRUE}
+
+tsne_feats <- readRDS(file.path(path, "RFtsne_feats_2spp.RDS"))
+  
+```
+
+#### Figure S4.5: t-SNE Features
+
+```{r echo = TRUE, eval = TRUE, dpi = 100}
+
+invisible(pblapply(1:length(spp), function(x){
+  lapply(1:length(nms), function(y){
+
+    tsne <- tsne_feats[[x]][[y]]
+    
+    # filter metadata for plotting 
+    metadats <- dfs[[grep(spp[x], names(dfs), ignore.case = TRUE)]]
+    tmp_indivs <- indivs[[grep(spp[x], names(indivs), ignore.case = TRUE)]]
+
+    # create a data frame with t-SNE embeddings for plotting
+    df <- data.frame(X = tsne$Y[, 1], Y = tsne$Y[, 2], indiv = as.character(metadats$bird_ID), site = as.character(metadats$site))
+    # str(df)
+
+    # filter by individuals
+    df <- droplevels(df[grep(paste(paste("^", tmp_indivs, "$", sep = ""), collapse = "|"), df$indiv), ])
+  
+    # aesthetics by individual
+    sts <- unique(as.character(df$site))
+    ins <- unique(as.character(df$indiv))
+    cols <- c("#F8766D", "#00BFC4", grey.colors(12)[3])
+
+    plot_cols <- unlist(lapply(1:length(sts), function(s){
+      rep(cols[s], length(ins[grep(sts[s], ins)]))
+    }))
+
+    # if MNK_site
+    if(grepl("site", spp[x])){
+      
+      # convex hull polygons by site
+      hulls <- plyr::ddply(df, "site", function(z){
+        z[chull(z$X, z$Y), ]
+      })
+      
+    } else if(!grepl("site", spp[x])){ 
+    
+      # convex hull polygons by individual
+      hulls <- plyr::ddply(df, "indiv", function(z){
+        z[chull(z$X, z$Y), ]
+      })
+    }
+  
+    # make graphic
+    gg <- ggplot(df, aes(x = X, y = Y))
+  
+    if(grepl("site", spp[x])){
+      
+     gg <- gg + geom_point(aes(color = site, fill = site, shape = site), size = 4) + 
+    
+      geom_polygon(data = hulls, aes(x = X, y = Y, fill = site, color = site), alpha = 0.2)
+      
+    } else if(!grepl("site", spp[x])){ 
+      
+     gg <- gg + geom_point(aes(color = indiv, fill = indiv, shape = indiv), size = 4) + 
+      geom_polygon(data = hulls, aes(x = X, y = Y, fill = indiv, color = indiv), alpha = 0.2) +
+    
+      scale_colour_manual(values = plot_cols) + scale_fill_manual(values = plot_cols) +
+      scale_shape_manual(values = c(0, 1, 2, 4, 21, 22, 8, 24))
+      
+    }
+
+   gg <- gg + xlab("t-SNE Dimension 1") + ylab("t-SNE Dimension 2") + 
+    theme_AcousticSpace() +
+    ggtitle(paste(spp[x], "-", nms[y], "t-SNE perplexity = ", plx[x], sep = " "))
+
+    print(gg)
+  
+  })
+
+}))
+
+```
+
+The t-SNE features look great. Overall, MNK calls overlap quite a lot in acoustic space but are overdispersed relative to YNA calls, which cluster by site (representative of dialects). The patterns visible across the t-SNE extracted features are similar to those we saw in MDS and PCA features prior to optimizing t-SNE. 
+
+## General Modeling Approach
+
+We trained supervised random forests models using individuals for MNK and dialects for YNA. We split the remaining calls into two datasets: a validation data set, which we used to ground-truth how well random forests learned patterns of acoustic similarity, and a final test data set of all remaining calls for predicting random forests acoustic similarity at the site social scale. After model training and validation, we used the best model per species to predict acoustic similarity of the calls set aside for final testing. 
+
+## Assemble Predictors
+
+We named features across parameter types. We also generated 4 random variables as built-in controls to better assess random forests variable importance (any acoustic or image features with importance <= random variable importance are noise). We combined all MDS, PCA, t-SNE features and random variables, as well as metadata important for random forests response variables into a single predictor data set per species. 
+```{r echo = TRUE, eval = FALSE}
+
+# add call_ID to MNK_indiv
+dfs$MNK_indiv$call_ID <- sapply(1:nrow(dfs$MNK_indiv), function(x){
+ strsplit(as.character(dfs$MNK_indiv$sound.files)[x], split = "_")[[1]][6]
+})
+
+isoMDS_feats <- readRDS(file.path(path, "RFfeats_isoMDS_2spp.RDS"))
+PCA_feats <- readRDS(file.path(path, "PCA_RFfeats_2spp.RDS"))
+tsne_feats <- readRDS(file.path(path, "RFtsne_feats_2spp.RDS"))
+
+invisible(pblapply(1:length(spp), function(x){
+    
+    # make unique call ID variables to name feature dimensions.
+    uniq_ID <- paste(dfs[[x]]$bird_ID, dfs[[x]]$call_ID, sep = "-")
+    
+    # read in MDS and PCA features and change dimension names
+    SPCC_MDS <- isoMDS_feats[[x]]$SPCC
+    dimnames(SPCC_MDS)[[1]] <- uniq_ID
+    dimnames(SPCC_MDS)[[2]] <- c(paste("SPCC_MDS", seq(1, dim(SPCC_MDS)[2], 1), sep = "_D"))
+
+    spent_DTW_MDS <- isoMDS_feats[[x]]$spDTW
+    dimnames(spent_DTW_MDS)[[1]] <- uniq_ID
+    dimnames(spent_DTW_MDS)[[2]] <- c(paste("spentDTW_MDS", seq(1, dim(spent_DTW_MDS)[2], 1), sep = "_D"))
+    
+    dfDTW_MDS <- isoMDS_feats[[x]]$dfDTW
+    dimnames(dfDTW_MDS)[[1]] <- uniq_ID
+    dimnames(dfDTW_MDS)[[2]] <- c(paste("dfDTW_MDS", seq(1, dim(dfDTW_MDS)[2], 1), sep = "_D"))
+    
+    multiDTW_MDS <- isoMDS_feats[[x]]$multiDTW
+    dimnames(multiDTW_MDS)[[1]] <- uniq_ID
+    dimnames(multiDTW_MDS)[[2]] <- c(paste("multiDTW_MDS", seq(1, dim(multiDTW_MDS)[2], 1), sep = "_D"))
+    
+    spf_PCA <- PCA_feats[[x]]$asp_params$x
+    dimnames(spf_PCA)[[1]] <- uniq_ID
+    dimnames(spf_PCA)[[2]] <- paste("sp_acoustic_PCA", seq(1, ncol(spf_PCA), 1), sep = "_D")
+
+    cepf_PCA <- PCA_feats[[x]]$cep_params$x
+    dimnames(cepf_PCA)[[1]] <- uniq_ID
+    dimnames(cepf_PCA)[[2]] <- paste("cep_acoustic_PCA", seq(1, ncol(cepf_PCA), 1), sep = "_D")
+    
+    imgf_PCA <- PCA_feats[[x]]$img_params$x
+    dimnames(imgf_PCA)[[1]] <- uniq_ID
+    dimnames(imgf_PCA)[[2]] <- paste("img_acoustic_PCA", seq(1, ncol(imgf_PCA), 1), sep = "_D")
+    
+    # read in t-SNE features and change dimension names
+    SPCC_tsne <- tsne_feats[[x]]$SPCC$Y
+    dimnames(SPCC_tsne)[[1]] <- uniq_ID
+    dimnames(SPCC_tsne)[[2]] <- c(paste("SPCC_tSNE", seq(1, dim(SPCC_tsne)[2], 1), sep = "_D"))
+
+    spent_DTW_tsne <- tsne_feats[[x]]$spDTW$Y
+    dimnames(spent_DTW_tsne)[[1]] <- uniq_ID
+    dimnames(spent_DTW_tsne)[[2]] <- c(paste("spentDTW_tSNE", seq(1, dim(spent_DTW_tsne)[2], 1), sep = "_D"))
+    
+    dfDTW_tsne <- tsne_feats[[x]]$dfDTW$Y
+    dimnames(dfDTW_tsne)[[1]] <- uniq_ID
+    dimnames(dfDTW_tsne)[[2]] <- c(paste("dfDTW_tSNE", seq(1, dim(dfDTW_tsne)[2], 1), sep = "_D"))
+    
+    multiDTW_tsne <- tsne_feats[[x]]$multiDTW$Y
+    dimnames(multiDTW_tsne)[[1]] <- uniq_ID
+    dimnames(multiDTW_tsne)[[2]] <- c(paste("multiDTW_tSNE", seq(1, dim(multiDTW_tsne)[2], 1), sep = "_D"))
+    
+    spf_tsne <- tsne_feats[[x]]$asp_params$Y
+    dimnames(spf_tsne)[[1]] <- uniq_ID
+    dimnames(spf_tsne)[[2]] <- c(paste("sp_tSNE", seq(1, dim(spf_tsne)[2], 1), sep = "_D"))
+    
+    cepf_tsne <- tsne_feats[[x]]$cep_params$Y
+    dimnames(cepf_tsne)[[1]] <- uniq_ID
+    dimnames(cepf_tsne)[[2]] <- c(paste("cep_tSNE", seq(1, dim(cepf_tsne)[2], 1), sep = "_D"))
+    
+    imgf_tsne <- tsne_feats[[x]]$img_params$Y
+    dimnames(imgf_tsne)[[1]] <- uniq_ID
+    dimnames(imgf_tsne)[[2]] <- c(paste("img_tSNE", seq(1, dim(imgf_tsne)[2], 1), sep = "_D"))
+    
+    # collect features in a data frame
+    sup_rf <- data.frame(site = dfs[[x]]$site, indiv = dfs[[x]]$bird_ID, uniq_call_ID = uniq_ID, SPCC_MDS, spent_DTW_MDS, dfDTW_MDS, multiDTW_MDS, spf_PCA, cepf_PCA, imgf_PCA, SPCC_tsne, spent_DTW_tsne, dfDTW_tsne, multiDTW_tsne, spf_tsne, cepf_tsne, imgf_tsne)
+    
+    # make 4 random variables as built-in controls
+    set.seed(401)
+    RND_vars <- data.frame(RND1 = rnorm(n = nrow(sup_rf), mean = 3, sd = 15), RND2 = rpois(n = nrow(sup_rf), lambda = 100), RND3 = runif(n = nrow(sup_rf), min = 0.5, max = 1000), RND4 = rlogis(n = nrow(sup_rf), location = 1, scale = 10))
+
+    # preprocess random variables by transforming, centering and scaling
+    pp_list <- caret::preProcess(RND_vars, method = c("YeoJohnson", "center", "scale"), thresh = 0.98, freqCut = 98/2, uniqueCut = 2)
+
+    RND_vars <- predict(pp_list, RND_vars)
+
+    # add the random variables to the set of features
+    sup_rf <- data.frame(sup_rf, RND_vars)
+    
+    saveRDS(sup_rf, file.path(path, paste(paste("sup_rf", spp[x], sep = "_"), ".RDS", sep = "")))
+    
+}))
+
+```
+
+```{r echo = TRUE, eval = TRUE}
+
+spp <- c("MNK_indiv", "MNK_site", "YNA")
+
+sup_rf_list <- pblapply(1:length(spp), function(x){
+  readRDS(file.path(path, paste(paste("sup_rf", spp[x], sep = "_"), ".RDS", sep = "")))
+})
+
+```
+
+The MNK_indiv predictor data set contained 97 calls and 303 quantitative features, the MNK_site data set was 598 calls and 835 features. The YNA predictor data set contained to 417 calls and 648 features. All data sets included the 4 built-in controls.
+```{r echo = TRUE, eval = FALSE}
+
+sapply(1:length(spp), function(x){
+  dim(sup_rf_list[[x]][, sapply(sup_rf_list[[x]], is.numeric)])
+})
+
+```
+
+## Pre-process Predictors
+
+We preprocessed the predictor set by removing highly collinear variables (Pearson's r > 0.75). We assessed collinearity among features, but not collinearity with SNR. Calls were extracted from original recordings as cuts, and this signal selection method did not yield sufficient space before and after each call to calculate SNR.
+```{r echo = TRUE, eval = FALSE}
+
+sup_rf_pp <- invisible(pblapply(1:length(spp), function(x){
+  
+  cor <- stats::cor(sup_rf_list[[x]][, sapply(sup_rf_list[[x]], is.numeric)], method = "pearson")
+
+  # find names of variables that have > 0.75 collinearity
+  corr_nms <- caret::findCorrelation(cor, cutoff = 0.75, verbose = TRUE, names = TRUE, exact = TRUE)
+  
+  # for MNK_indiv, additionally remove features that were removed for MNK_site
+  if(grepl("MNK_indiv", spp[x])){
+    corr_nms <- c(corr_nms, "dfDTW_MDS_D2", "spentDTW_tSNE_D1", "cep_tSNE_D2")
+  }
+
+  # remove any collinear variables from the data frame
+  sup_rf_tmp <- sup_rf_list[[x]][, -grep(paste(paste("^", corr_nms, "$", sep = ""), collapse = "|"), names(sup_rf_list[[x]]))]
+
+  return(sup_rf_tmp)
+
+}))
+
+names(sup_rf_pp) <- spp
+
+# check that all features match between the MNK_indiv and MNK_site data sets
+# model training and validation will use MNK_indiv and MNK_site for model testing, so the same features need to be included per data set
+names(sup_rf_pp[["MNK_indiv"]])[-which(names(sup_rf_pp[["MNK_indiv"]]) %in% names(sup_rf_pp[["MNK_site"]]))]
+
+```
+
+How many quantitative features remain after preprocessing? 285 for MNK_indiv, 825 for MNK_site and 634 for YNA. 
+```{r echo = TRUE, eval = FALSE}
+
+sapply(1:length(spp), function(x){
+  dim(sup_rf_pp[[x]][, sapply(sup_rf_pp[[x]], is.numeric)])
+})
+
+saveRDS(sup_rf_pp, file.path(path, "sup_rf_pp.RDS"))
+
+```
+
+```{r echo = TRUE, eval = TRUE}
+
+sup_rf_pp <- readRDS(file.path(path, "sup_rf_pp.RDS"))
+
+```
+
+## Notes on Model Training
+
+We trained models using a subset of individuals per species with the most calls per bird. The MNK training data set consisted of 4 individuals from the same site with the most calls (73 calls total, same as model training in Supplementary Methods 2). The YNA training data set was 8 sites representing 2 dialects for 274 calls total (4 sites from each of the Northern and Southern dialects). 148 calls were from the Northern dialect and 126 calls were from the Southern dialect. 
+
+We used our remaining MNK repeatedly sampled (sometimes referred to as "focal") individual calls as a validation data set and used all higher social scale calls as our final test data set. For YNA validation, we chose 1 individual each from sites Pnar and Cabu (Northern dialect<a href='#References'><sup>[2]</sup></a>), and 2 individuals from the site Curu (Southern dialect<a href='#References'><sup>[2]</sup></a>), to serve as validation data sets. We assigned all remaining YNA calls to the test data set. 
+
+We used two random forests implementations from the `ranger` and `randomForest` packages. In general, we observed higher classification performance for models trained with `ranger` (see below).
+
+## Model Training
+
+```{r echo = TRUE, eval = TRUE}
+
+# regional dialect labels are encoded in original sound file names
+yna$regional_dialect <- sapply(1:nrow(yna), function(x){
+  strsplit(as.character(yna$sound.files[x]), split = "_")[[1]][4]
+})
+
+sup_rf_pp[["YNA"]]$regional_dialect <- sapply(1:nrow(sup_rf_pp[["YNA"]]), function(x){
+  strsplit(as.character(yna$sound.files[x]), split = "_")[[1]][4]
+})
+
+```
+
+Tables of calls by individuals and sites for YNA, which we used to partition calls into training, validation and test data sets.
+```{r echo = TRUE, eval = TRUE}
+
+table(yna$site)
+table(yna$bird_ID)
+
+```
+
+1 Nicaraguan dialect site, 7 Northern dialect sites, 6 Southern dialect sites.
+```{r echo = TRUE, eval = TRUE}
+
+table(yna$site)
+table(yna$regional_dialect)
+table(yna$regional_dialect, yna$site)
+
+```
+
+We added a variable to denote training status of each call per species. 
+```{r echo = TRUE, eval = FALSE}
+
+train_labels <- list(c("1145-AAT", "1145-UM1", "1145-UM2", "1145-UM4"), c("horiz", "inoc", "junq", "pelal", "baju", "grand", "tarc", "zapol"))
+
+spp_train <- c("MNK_indiv", "YNA")
+
+col_nm <- list("indiv", "site")
+
+# retain data frames to use for training only
+rf_df <- list(sup_rf_pp[["MNK_indiv"]], sup_rf_pp[["YNA"]])
+
+# x <- 2
+sup_rf_set <- invisible(pblapply(1:length(spp_train), function(x){
+  
+  rf_df[[x]]$set <- rf_df[[x]][[col_nm[[x]]]]
+  rf_df[[x]]$set <- gsub(paste(train_labels[[x]], collapse = "|"), "train", rf_df[[x]]$set)
+  rf_df[[x]]$set[rf_df[[x]]$set != "train"] <- "test"
+    
+  # change training class labels to cooperate with caret training
+  # if MNK_indiv, add a letter in front of indiv, which starts with number
+  if(grepl("MNK_indiv", spp_train[x])) rf_df[[x]]$indiv <- gsub("1145-", "", rf_df[[x]]$indiv)
+  
+  # if YNA, replace "-" in indiv IDs with "_"
+  if(grepl("YNA", spp_train[x])) rf_df[[x]]$indiv <- gsub("-", "_", rf_df[[x]]$indiv)
+    
+    return(rf_df[[x]])
+
+}))
+
+names(sup_rf_set) <- spp_train
+
+saveRDS(sup_rf_set, file.path(path, "sup_rf_set.RDS"))
+
+```
+
+How many calls remain for training?
+```{r echo = TRUE, eval = TRUE}
+
+spp_train <- c("MNK_indiv", "YNA")
+sup_rf_set <- readRDS(file.path(path, "sup_rf_set.RDS"))
+
+sapply(1:length(spp_train), function(x){
+  length(sup_rf_set[[x]]$set[grep("train", sup_rf_set[[x]]$set)])
+})
+
+table(sup_rf_set[["YNA"]]$set, sup_rf_set[["YNA"]]$regional_dialect)
+
+```
+
+### Model 1 Training
+
+We trained models with 5 repeats of repeated 10-fold cross-validation. The models we built below per species (trained on individuals) were multiclass models (e.g. 4 training MNK individuals = 4 class labels). Here we trained the first model per species, which included all features (no additional feature selection beyond the previous pre-processing). We trained models using both `ranger` and `randomForest` implementations.
+```{r echo = TRUE, eval = FALSE}
+
+# set seed to obtain the same results 
+seed <- 401
+
+# set training labels by species
+train_col <- list("indiv", "regional_dialect")
+
+trees <- seq(500, 2500, 500)
+implem <- c("ranger", "rf")
+cores <- parallel::detectCores() - 2
+
+# x <- 1
+# i <- 1
+model1_list <- invisible(pblapply(1:length(spp_train), function(x){
+  
+  tmp <- sup_rf_set[[spp_train[x]]]
+
+  # set seed to obtain the same results 
+  seed <- 401
+
+  # initialize training data, mtry and number of trees
+  train <- droplevels(tmp[grep("train", tmp$set), ])
+  
+  # remove categorical variables that will not be used for classification
+  train <- train[, -grep("site|uniq_call_ID|set", names(train))]
+  # dim(train)
+  # names(train)
+  
+  train[[train_col[[x]]]] <- as.factor(train[[train_col[[x]]]])
+  
+  mtry <- round(seq(2, ncol(train[, sapply(train, is.numeric)]), ncol(train[, sapply(train, is.numeric)])/10))
+  # mtry
+
+  # perform model training over two random forests implementations
+  # i <- 2
+  model1_list <- lapply(1:length(implem), function(i){
+    
+    if(implem[i] == "rf"){
+    
+    # initialize train control parameters for caret
+    fitControl <- caret::trainControl(method = c("repeatedcv"), number = 10, repeats = 5, search = "grid", returnData = TRUE, returnResamp = "final", savePredictions = "final", classProbs = TRUE, summaryFunction = multiClassSummary)
+    
+    tunegrid <- expand.grid(.mtry = mtry)
+  
+    } else if(implem[i] == "ranger"){
+    
+    splitrule <- "gini"
+    min.node.size <- 1
+    tunegrid <- expand.grid(.mtry = mtry, .splitrule = splitrule, .min.node.size = min.node.size)
+    
+     fitControl <- caret::trainControl(method = "repeatedcv", number = 10, repeats = 5, search = "grid", returnData = TRUE, returnResamp = "final", savePredictions = "final", classProbs = TRUE, summaryFunction = multiClassSummary, verboseIter = TRUE)
+  }
+    
+   mlist <- list()
+   mlist <- pblapply(1:length(trees), function(n){
+      
+      if(implem[i] == "rf"){
+        set.seed(seed)
+        
+        rf_model <- caret::train(x = train[, sapply(train, is.numeric)], y = train[[train_col[[x]]]], method = "rf", ntree = trees[n], replace = TRUE, sampsize = 10, importance = TRUE, proximity = TRUE, norm.votes  = TRUE, do.trace = FALSE, metric = c("Kappa"), maximize = TRUE, trControl = fitControl, tuneGrid = tunegrid, tuneLength = 10)
+
+      } else if(implem[i] == "ranger"){
+        rf_model <- caret::train(x = train[, sapply(train, is.numeric)], y = train[[train_col[[x]]]], num.trees = trees[n], method = "ranger", trControl = fitControl, tuneGrid = tunegrid, importance = "permutation", replace = TRUE, scale.permutation.importance = TRUE, num.threads = cores, metric = c("Kappa"), maximize = TRUE, tuneLength = 10, seed = seed)
+      }
+      
+      return(rf_model)
+    })
+# yields warnings
+# Warning message:
+# In nominalTrainWorkflow(x = x, y = y, wts = weights, info = trainInfo,  :
+#   There were missing values in resampled performance measures.
+    names(mlist) <- trees
+    return(mlist)
+  })
+  
+  names(model1_list) <- implem
+  return(model1_list)
+  
+}))
+length(model1_list)
+names(model1_list) <- spp_train
+saveRDS(model1_list, file.path(path, "model1_list_2spp.RDS"))
+
+```
+
+```{r echo = TRUE, eval = TRUE}
+
+m1list <- readRDS(file.path(path, "model1_list_2spp.RDS"))
+
+```
+
+#### Model 1 Performance
+
+#### Figure S4.6: Performance Across Trees
+
+We visualized performance metrics of the first model. 
+```{r echo = TRUE, eval = TRUE, dpi = 100}
+
+trees <- seq(500, 2500, 500)
+implem <- c("ranger", "rf")
+
+invisible(lapply(1:length(spp_train), function(x){
+  lapply(1:length(implem), function(i){
+      results <- resamples(m1list[[spp_train[x]]][[implem[i]]])
+      print(dotplot(results, metric = c("Kappa", "Accuracy"), main = paste(spp_train[x], implem[i], sep = " : ")))
+  })
+}))
+
+```
+
+Confusion matrix for the MNK_indiv `ranger` model.
+```{r echo = TRUE, eval = TRUE}
+
+confusionMatrix(m1list$MNK_indiv$ranger[["2500"]])
+# print(m1list$MNK_indiv$ranger[["2500"]]) # to see mtry used
+
+```
+
+Confusion matrix for the MNK_indiv `randomForest` model.
+```{r echo = TRUE, eval = TRUE}
+
+confusionMatrix(m1list$MNK_indiv$rf[["2000"]])
+# print(m1list$MNK_indiv$rf[["2000"]])
+
+```
+
+Confusion matrix for the YNA `ranger` model.
+```{r echo = TRUE, eval = TRUE}
+
+confusionMatrix(m1list$YNA$ranger[["2000"]])
+# print(m1list$YNA$ranger[["2000"]])
+
+```
+
+Confusion matrix for the YNA `randomForest` model.
+```{r echo = TRUE, eval = TRUE}
+
+confusionMatrix(m1list$YNA$rf[["2500"]])
+# print(m1list$YNA$rf[["2500"]])
+
+```
+
+The `ranger` random forests implementation yielded better performance across species. The highest performing model for MNK (trained on individuals) had 96.71% classification accuracy. For YNA, training on regional dialects yielded 98.47% accuracy.
+
+#### Figure S4.7: Variable Importance
+
+We evaluated random forests variable importance across species and implementations.
+```{r echo = TRUE, eval = TRUE, dpi = 100}
+
+names(m1list) <- spp_train
+train_list <- list(list(m1list$MNK_indiv$ranger[["2500"]]$finalModel, m1list$MNK_indiv$rf[["2000"]]$finalModel), list(m1list$YNA$ranger[["2000"]]$finalModel, m1list$YNA$rf[["2500"]]$finalModel))
+spp_train <- c("MNK_indiv", "YNA")
+implem <- c("ranger", "rf")
+opt_trees <- list(c("2500", "2000"), c("2000", "2500"))
+
+n <- 12
+# pie(rep(1, n), col = heat.colors(n))
+
+# cep, SPCC, dfDTW, sp, multiDTW, img, spentDTW, RND
+orig_cols <- c(alpha("purple", 0.6), topo.colors(12)[2], terrain.colors(12)[1], heat.colors(12)[1], heat.colors(12, alpha = 0.7)[5], heat.colors(12)[8], gray.colors(12)[5], "black")
+
+invisible(lapply(1:length(spp_train), function(x){
+  lapply(1:length(implem), function(i){
+    
+    # make a data frame to visualize variable importance
+    if(implem[i] == "ranger"){
+      var_imp_df <- data.frame(var_nms = names(train_list[[x]][[i]]$variable.importance), imp = train_list[[x]][[i]]$variable.importance)
+    } else if(implem[i] == "rf"){
+      var_imp_df <- data.frame(var_nms = dimnames(train_list[[x]][[i]]$importance)[[1]], imp = train_list[[x]][[i]]$importance[, grep("MeanDecreaseAccuracy", dimnames(train_list[[x]][[i]]$importance)[[2]])])
+    }
+    
+    # make a variable of parameter type
+    # x <- 1
+    var_imp_df$var_type <- sapply(1:nrow(var_imp_df), function(y){
+      strsplit(as.character(var_imp_df$var_nms[y]), split = "_")[[1]][1]
+    })
+
+    # standardize variable names if necessary (changed parameter type names slightly in sup_rf_pp)
+    var_imp_df$var_type <- gsub("RND[0-9]+", "RND", var_imp_df$var_type)
+    var_imp_df$var_type <- gsub("cepf", "cep", var_imp_df$var_type)
+    var_imp_df$var_type <- gsub("spf", "sp", var_imp_df$var_type)
+    var_imp_df$var_type <- gsub("imgf", "img", var_imp_df$var_type)
+    var_imp_df$var_type <- gsub("spent$", "spentDTW", var_imp_df$var_type)
+
+    # order by importance
+    ord <- order(var_imp_df$imp, decreasing = TRUE)
+    var_imp_df <- var_imp_df[ord, ]
+    var_imp_df$var_nms <- factor(var_imp_df$var_nms, levels = unique(var_imp_df$var_nms))
+    var_imp_df$var_type <- factor(var_imp_df$var_type, levels = c("cep", "SPCC", "dfDTW", "sp", "multiDTW", "img", "spentDTW", "RND"))
+    # levels(var_imp_df$var_type)
+
+    # plot only the top 20 variables by importance
+    plot_df <- droplevels(var_imp_df[1:20, ])
+    plot_df$var_type <- factor(plot_df$var_type, levels = unique(plot_df$var_type))
+    levels(plot_df$var_type)
+    
+    # subset original colors by the current variable type
+    cols <- unlist(sapply(1:length(levels(plot_df$var_type)), function(v){
+      orig_cols[grep(paste("^", levels(plot_df$var_type)[v], "$", sep = ""), levels(var_imp_df$var_type))]
+    }))
+
+
+   gg <- ggplot(data = plot_df) + 
+      geom_segment(aes(x = 0, xend = imp, y = forcats::fct_rev(var_nms), yend = forcats::fct_rev(var_nms), color = var_type), size = 1.5) +
+      geom_point(aes(y = forcats::fct_rev(var_nms), x = imp), pch = 21, fill = gray.colors(n)[2], color = "black", size = 4) +
+      scale_color_manual(values = cols) +
+      xlab("Variable Importance") + ylab("Top 20 Most Important Features") +
+  theme_AcousticSpace() + theme(panel.grid.major.x = element_line(color = "black", size = 0.25, linetype = "dashed")) +
+      ggtitle(paste(spp_train[x], implem[i], paste(opt_trees[[x]][[i]], "trees", sep = " "), sep = " - "))
+    print(gg)
+  })
+  
+}))
+
+
+```
+
+Variable importance was quite different between `ranger` and `randomForest`, most notably for the YNA model. Across models, we saw higher variable importance for earlier dimensions of the MDS, PCA and t-SNE features, which typically contain more varation than later dimensions and are therefore expected to have higher importance.
+
+#### Figure S4.8: `ranger` vs. `randomForest` Variable Importance
+
+We also compared variable importance for the same 40 variables across random forest implementations by species.
+```{r echo = TRUE, eval = TRUE, dpi = 100}
+
+invisible(lapply(1:length(spp_train), function(x){
+    
+    var_imp_df_ranger <- data.frame(var_nms = names(train_list[[x]][[1]]$variable.importance), imp = train_list[[x]][[1]]$variable.importance)
+
+    var_imp_df_rf <- data.frame(var_nms = dimnames(train_list[[x]][[2]]$importance)[[1]], imp = train_list[[x]][[2]]$importance[, grep("MeanDecreaseAccuracy", dimnames(train_list[[x]][[2]]$importance)[[2]])])
+    
+    # order by importance
+    ord <- order(var_imp_df_ranger$imp, decreasing = TRUE)
+    var_imp_df_ranger <- var_imp_df_ranger[ord, ]
+    
+    ord <- order(var_imp_df_rf$imp, decreasing = TRUE)
+    var_imp_df_rf <- var_imp_df_rf[ord, ]
+
+    # among the first top 40 impotant variables, find 40 common important variables across ranger and randomForest implementations
+   vars <- as.character(var_imp_df_ranger$var_nms[1:40][which(var_imp_df_ranger$var_nms[1:40] %in% var_imp_df_rf$var_nms[1:40])])
+   
+   X <- var_imp_df_ranger$imp[grep(paste(paste("^", vars, "$", sep = ""), collapse = "|"), var_imp_df_ranger$var_nms)]
+   Y <- var_imp_df_rf$imp[grep(paste(paste("^", vars, "$", sep = ""), collapse = "|"), var_imp_df_rf$var_nms)]
+   plot_df <- data.frame(X, Y)
+
+   gg <- ggplot(data = plot_df) +
+     geom_point(aes(x = X, y = Y)) +
+     xlab("ranger variable importance") + ylab("randomForest variable importance") + ggtitle(spp_train[x])
+   
+   print(gg)
+  
+}))
+
+```
+
+Variable importance did not agree among `ranger` and `randomForest`, similar to results found when comparing `randomForest` to Python and SAS random forests implementations <a href='#References'><sup>[6]</sup></a>. A caveat here is that we used different importance metrics per implementation, so future work on a direct comparison should take care to use the same variable importance metric.
+
+We decided to proceed with the `ranger` random forests implementation in subsequent model training, as this consistently yielded higher classification performance. We moved on to make the second random forest model per species, using manual feature selection.
+
+### Model 2 Training
+
+```{r echo = TRUE, eval = TRUE}
+
+sup_rf_set <- readRDS(file.path(path, "sup_rf_set.RDS"))
+
+```
+
+We manually selected variables by importance, using built-in controls. 
+```{r echo = TRUE, eval = TRUE}
+
+names(m1list) <- spp_train
+train_list <- list(m1list$MNK_indiv$ranger[["2500"]]$finalModel, m1list$YNA$ranger[["2000"]]$finalModel)
+
+# x <- 1
+model2_train <- invisible(pblapply(1:length(spp_train), function(x){
+  
+  var_imp_df <- data.frame(var_nms = names(train_list[[x]]$variable.importance), imp = train_list[[x]]$variable.importance)
+
+  ord <- order(var_imp_df$imp, decreasing = TRUE)
+  var_imp_df <- var_imp_df[ord, ]
+  
+  # make variable names match the random forests training object if necessary
+  # see note above, had changed parameter type names between runs
+  var_imp_df$var_nms <- gsub("RND[0-9]+", "RND", var_imp_df$var_nms)
+  var_imp_df$var_nms <- gsub("cepf", "cep", var_imp_df$var_nms)
+  var_imp_df$var_nms <- gsub("spf", "sp", var_imp_df$var_nms)
+  var_imp_df$var_nms <- gsub("imgf", "img", var_imp_df$var_nms)
+  var_imp_df$var_nms <- gsub("spent_DTW", "spentDTW", var_imp_df$var_nms)
+
+  # find the maximum importance of random variables in the previous model
+  RND_var_imp <- max(var_imp_df$imp[grep("RND", var_imp_df$var_nms)])
+  RND_var_imp
+
+  # use the maximum importance of random variables as a threshold to exclude   acoustic features
+  # find which variables have mean importance greater than this, to retain in the final model
+  var_retain <- as.character(var_imp_df$var_nms[var_imp_df$imp > RND_var_imp])
+  
+  # grep("^RND", var_retain) # checking
+
+  # initialize training data
+  tmp <- sup_rf_set[[x]]
+  train <- droplevels(tmp[grep("train", tmp$set), ])
+  # dim(train)
+
+  # build and train a random forests model of features after manual feature selection
+  
+  # if MNK_indiv, add a letter in front of indiv, which starts with number
+  if(grepl("MNK_indiv", spp_train[x])) train$indiv <- gsub("1145-", "", train$indiv)
+  
+  if(!grepl("YNA", spp_train[x])){
+    
+    train_ms <- train[, grep(paste(paste("^", c("indiv", var_retain), "$", sep = ""), collapse = "|"), names(train))]
+
+    train_ms$indiv <- as.factor(train_ms$indiv)
+    
+  } else {
+    
+    train_ms <- train[, grep(paste(paste("^", c("regional_dialect", var_retain), "$", sep = ""), collapse = "|"), names(train))]
+
+    train_ms$regional_dialect <- as.factor(train_ms$regional_dialect)
+  }
+  
+  return(train_ms)
+  
+}))
+
+names(model2_train) <- spp_train
+
+```
+
+How many features remain per species after manual feature selection?
+```{r echo = TRUE, eval = TRUE}
+
+sapply(1:length(spp_train), function(x){
+  tmp <- model2_train[[x]]
+  ncol(tmp[, sapply(tmp, is.numeric)])
+})
+
+```
+
+Check that no random variables remain.
+```{r echo = TRUE, eval = TRUE}
+
+unique(sapply(1:length(spp_train), function(x){
+  tmp <- model2_train[[x]]
+  names(tmp)[grep("^RND", names(tmp))]
+}))
+
+```
+
+```{r echo = TRUE, eval = FALSE}
+
+trees <- seq(500, 2500, 500)
+cores <- parallel::detectCores() - 2
+spp_train <- c("MNK_indiv", "YNA")
+
+# set seed to obtain the same results 
+seed <- 401
+
+# x <- 2
+model2_list <- invisible(pblapply(1:length(spp_train), function(x){
+
+  train <- model2_train[[spp_train[x]]]
+  # str(train)
+  names(train)
+  
+  mtry <- round(seq(2, ncol(train[, sapply(train, is.numeric)]), ncol(train[, sapply(train, is.numeric)])/10))
+  # mtry
+  
+  if(!grepl("YNA", spp_sub[x])){
+    train_col <- "indiv"
+  } else {
+    train_col <- "regional_dialect"
+  }
+
+  # perform model training
+  splitrule <- "gini"
+  min.node.size <- 1
+  tunegrid <- expand.grid(.mtry = mtry, .splitrule = splitrule, .min.node.size = min.node.size)
+    
+  fitControl <- caret::trainControl(method = "repeatedcv", number = 10, repeats = 5, search = "grid", returnData = TRUE, returnResamp = "final", savePredictions = "final", classProbs = TRUE, summaryFunction = multiClassSummary, verboseIter = TRUE)
+    
+   mlist <- list()
+   mlist <- pblapply(1:length(trees), function(n){
+      
+  rf_model <- caret::train(x = train[, sapply(train, is.numeric)], y = train[[train_col]], num.trees = trees[n], method = "ranger", trControl = fitControl, tuneGrid = tunegrid, importance = "permutation", replace = TRUE, scale.permutation.importance = TRUE, num.threads = cores, metric = c("Kappa"), maximize = TRUE, tuneLength = 10, seed = seed)
+
+      return(rf_model)
+  })
+  # warning about missing values in resampled performance measures
+  
+  names(mlist) <- trees
+  return(mlist)
+
+}))
+
+names(model2_list) <- spp_train
+
+saveRDS(model2_list, file.path(path, "model2_list_2spp.RDS"))
+
+```
+
+```{r echo = TRUE, eval = TRUE}
+
+m2list <- readRDS(file.path(path, "model2_list_2spp.RDS"))
+
+spp_train <- c("MNK_indiv", "YNA")
+
+```
+
+#### Model 2 Performance
+
+#### Figure S4.9: Performance Across Trees
+
+```{r echo = TRUE, eval = TRUE}
+
+# x <- 1
+invisible(lapply(1:length(spp_train), function(x){
+  
+    results <- resamples(m2list[[x]])
+    print(dotplot(results, metric = c("Kappa", "Accuracy"), main = paste(spp_train[x], "ranger", sep = " : ")))
+
+}))
+
+```
+
+Confusion matrix for MNK.
+```{r echo = TRUE, eval = TRUE}
+
+confusionMatrix(m2list$MNK_indiv[["2500"]])
+# print(m2list$MNK_indiv[["2500"]])
+# length(names(m2list$MNK_indiv[["2500"]]$trainingData)[-grep("outcome", names(m2list$MNK_indiv[["2500"]]$trainingData))]) # number of features used
+
+```
+
+Confusion matrix for YNA, trained on dialects.
+```{r echo = TRUE, eval = TRUE}
+
+confusionMatrix(m2list$YNA[["2000"]])
+# print(m2list$YNA[["2000"]])
+
+# length(names(m2list$YNA[["2000"]]$trainingData)[-grep("outcome", names(m2list$YNA[["2000"]]$trainingData))]) # number of features used
+
+```
+
+#### Figure S4.10: Variable Importance
+
+We evaluated random forests variable importance for model 2 across species.
+```{r echo = TRUE, eval = TRUE, dpi = 100}
+
+train_list <- list(m2list$MNK_indiv[["2500"]]$finalModel, m2list$YNA[["2000"]]$finalModel)
+spp_train <- c("MNK_indiv", "YNA")
+opt_trees <- list(c("2500"), c("2000"))
+
+n <- 12
+# pie(rep(1, n), col = heat.colors(n))
+
+# cep, SPCC, dfDTW, sp, multiDTW, img, spentDTW, RND
+orig_cols <- c(alpha("purple", 0.6), topo.colors(12)[2], terrain.colors(12)[1], heat.colors(12)[1], heat.colors(12, alpha = 0.7)[5], heat.colors(12)[8], gray.colors(12)[5], "black")
+
+# x <- 2
+invisible(lapply(1:length(spp_train), function(x){
+    
+    # make a data frame to visualize variable importance
+    var_imp_df <- data.frame(var_nms = names(train_list[[x]]$variable.importance), imp = train_list[[x]]$variable.importance)
+   
+    # make a variable of parameter type
+    # x <- 1
+    var_imp_df$var_type <- sapply(1:nrow(var_imp_df), function(y){
+      strsplit(as.character(var_imp_df$var_nms[y]), split = "_")[[1]][1]
+    })
+
+    var_imp_df$var_type <- gsub("RND[0-9]+", "RND", var_imp_df$var_type)
+    var_imp_df$var_type <- gsub("cepf", "cep", var_imp_df$var_type)
+    var_imp_df$var_type <- gsub("spf", "sp", var_imp_df$var_type)
+    var_imp_df$var_type <- gsub("imgf", "img", var_imp_df$var_type)
+    var_imp_df$var_type <- gsub("spent$", "spentDTW", var_imp_df$var_type)
+
+    # order by importance
+    ord <- order(var_imp_df$imp, decreasing = TRUE)
+    var_imp_df <- var_imp_df[ord, ]
+    var_imp_df$var_nms <- factor(var_imp_df$var_nms, levels = unique(var_imp_df$var_nms))
+    var_imp_df$var_type <- factor(var_imp_df$var_type, levels = c("cep", "SPCC", "dfDTW", "sp", "multiDTW", "img", "spentDTW", "RND"))
+    # levels(var_imp_df$var_type)
+
+    # plot only the top 20 variables by importance
+    plot_df <- droplevels(var_imp_df[1:20, ])
+    plot_df$var_type <- factor(plot_df$var_type, levels = unique(plot_df$var_type))
+    levels(plot_df$var_type)
+    
+    # subset original colors by the current variable type
+    cols <- unlist(sapply(1:length(levels(plot_df$var_type)), function(v){
+      orig_cols[grep(paste("^", levels(plot_df$var_type)[v], "$", sep = ""), levels(var_imp_df$var_type))]
+    }))
+
+   gg <- ggplot(data = plot_df) + 
+      geom_segment(aes(x = 0, xend = imp, y = forcats::fct_rev(var_nms), yend = forcats::fct_rev(var_nms), color = var_type), size = 1.5) +
+      geom_point(aes(y = forcats::fct_rev(var_nms), x = imp), pch = 21, fill = gray.colors(n)[2], color = "black", size = 4) +
+      scale_color_manual(values = cols) +
+      xlab("Variable Importance") + ylab("Top 20 Most Important Features") +
+  theme_AcousticSpace() + theme(panel.grid.major.x = element_line(color = "black", size = 0.25, linetype = "dashed")) +
+      ggtitle(paste(spp_train[x], paste(opt_trees[[x]], "trees", sep = " "), sep = " - "))
+    print(gg)
+  
+}))
+
+```
+
+These variable importance plots look great.
+
+#### Supplementary Figure 5: Important Parameter Types
+
+We made bar graphs of variable importance across models (Supplementary Figure 5 in Supplementary Materials).
+```{r echo = TRUE, eval = TRUE, dpi = 100, fig.width = 7, fig.height = 6}
+
+train_list <- list(m2list$MNK_indiv[["2500"]]$finalModel, m2list$YNA[["2000"]]$finalModel)
+spp <- c("MNK", "YNA")
+
+opt_trees <- list(c("2500"), c("2000"))
+
+# make a data frame of the variable types most important per species
+# x <- 1
+var_type_df <- invisible(lapply(1:length(spp), function(x){
+    
+    # make a data frame to visualize variable importance
+    var_imp_df <- data.frame(var_nms = names(train_list[[x]]$variable.importance), imp = train_list[[x]]$variable.importance)
+    
+    # order by importance
+    ord <- order(var_imp_df$imp, decreasing = TRUE)
+    var_imp_df <- var_imp_df[ord, ]
+    
+    # take the 40 most important variablea
+    var_imp_df <- var_imp_df[1:40, ]
+   
+    # make a variable of parameter type
+    # x <- 1
+    var_imp_df$var_type <- sapply(1:nrow(var_imp_df), function(y){
+      strsplit(as.character(var_imp_df$var_nms[y]), split = "_")[[1]][1]
+    })
+    
+    # for manuscript figure
+    var_imp_df$var_type <- as.character(var_imp_df$var_type)
+    var_imp_df$var_type <- gsub("RND[0-9]+", "RND", var_imp_df$var_type)
+    var_imp_df$var_type <- gsub("cepf|cep", "Cepstral Coefficients", var_imp_df$var_type)
+    var_imp_df$var_type <- gsub("spf$|sp$", "Acoustic Measurements", var_imp_df$var_type)
+    var_imp_df$var_type <- gsub("imgf|img", "Image Processing", var_imp_df$var_type)
+    var_imp_df$var_type <- gsub("spent$|spentDTW$", "Spectral Entropy DTW", var_imp_df$var_type)
+    var_imp_df$var_type <- gsub("dfDTW", "Dominant Frequency DTW", var_imp_df$var_type)
+    var_imp_df$var_type <- gsub("multiDTW", "Multivariate DTW", var_imp_df$var_type)
+
+    df <- data.frame(var_type = var_imp_df$var_type, spp = spp[x])
+    
+    # remove RND variables
+    if("^RND$" %in% as.character(var_imp_df$var_type)){
+      df <- droplevels(df[-grep("^RND$", df$var_type), ])
+    }
+    
+    return(df)
+   
+}))
+var_type_df <- data.table::rbindlist(var_type_df)
+# str(var_type_df)
+
+unique(var_type_df$var_type)
+
+n <- 12
+# pie(rep(1, n), col = heat.colors(n))
+
+# colors by variable type
+# cep, SPCC, dfDTW, sp, multiDTW, img, spentDTW
+cols <- alpha(c("purple", topo.colors(12)[2], terrain.colors(12)[1], heat.colors(12)[1], heat.colors(12, alpha = 0.7)[5], heat.colors(12)[8], gray.colors(12)[5]), 0.8)
+
+var_type_df$var_type <- factor(var_type_df$var_type, levels = c("Cepstral Coefficients", "SPCC", "Dominant Frequency DTW",  "Spectral Entropy DTW", "Multivariate DTW", "Acoustic Measurements", "Image Processing"))
+
+max_num <- max(table(var_type_df$var_type, var_type_df$spp))
+
+ggplot(data = var_type_df, aes(fct_rev(var_type))) + 
+  geom_bar(aes(fill = var_type), color = gray.colors(n)[4]) +
+  facet_wrap(~ spp) +
+  scale_color_manual(values = cols) +
+  scale_fill_manual(values = cols) +
+  scale_y_discrete(breaks = seq(1, max_num, 1), limits = seq(1, max_num, 1)) +
+  coord_flip() +
+  xlab("Feature Type") + ylab("Number of Features Among the Top 40 \n Most Important Variables") + 
+  guides(fill = FALSE) +
+  theme_bw() + theme(legend.position = "top", legend.text = element_text(size = 10), axis.text = element_text(size = 8), axis.title = element_text(size = 10), strip.text = element_text(size = 10, face = "bold"))
+  
+# ggsave(file.path(path, "SupplementaryFigure5_RFVarImp_2spp.tiff"), units = "in", width = 5, height = 4.5, dpi = 325)
+  
+```
+
+## Model Validation
+
+We saved the best `ranger` model per species to use for model validation. For MNK, the second model of manually selcted features had slightly better performance than the first model with all features. For YNA, the second model also performed slightly better.
+```{r echo = TRUE, eval = FALSE}
+
+final_model_list <- list(m2list$MNK_indiv[["2500"]]$finalModel, m2list$YNA[["2000"]]$finalModel)
+
+names(final_model_list) <- spp_train
+
+saveRDS(final_model_list, file.path(path, "final_ranger_models_2spp.RDS"))
+
+```
+
+We then split testing calls into a validation set, and a final test set to yield acoustic similarity at the site scale. 
+```{r echo = TRUE, eval = TRUE}
+
+sup_rf_set <- readRDS(file.path(path, "sup_rf_set.RDS"))
+
+```
+
+How many calls remain for validation and/or final testing? For MNK, we used all remaining repeated individual calls for validation and the calls for higher social scales for final testing.
+```{r echo = TRUE, eval = TRUE}
+
+col_nm <- list("indiv", "regional_dialect")
+
+sapply(1:length(spp_train), function(x){
+  table(sup_rf_set[[spp_train[x]]][[col_nm[[x]]]][grep("test", sup_rf_set[[x]]$set)])
+})
+
+```
+
+We partitioned the remaining calls into validation and final site-level testing.
+```{r echo = TRUE, eval = FALSE}
+
+# initialize individuals to be be designated as validation (ground-truthing) test data sets
+# using the same individuals for the YNA models
+validatn_indivs <- list(c("UM3", "CHAC-UM5", "EMBR-RAW", "EMBR-ZW8"), c("pnar_1", "cabu_1", "curu_1", "curu_2"))
+
+rf_df <- sup_rf_set
+
+# x <- 2
+sup_rf_test <- invisible(pblapply(1:length(spp_train), function(x){
+    
+    rf_df[[x]]$set[grep(paste(paste("^", validatn_indivs[[x]], "$", sep = ""), collapse = "|"), as.character(rf_df[[x]]$indiv))] <- "validatn"
+  
+  # if MNK, site testing data set is separate
+  # if YNA, check which sites have more than 2 individuals remaining and assign these as site-level test sets
+  if(grepl("YNA", spp_train[x])){
+    
+    test_labels <- as.character(rf_df[[x]]$indiv[grep("test$", rf_df[[x]]$set)])
+    
+    tmp <- droplevels(rf_df[[x]][grep("test$", rf_df[[x]]$set), ])
+    
+    # sites with >= 2 birds remaining after assigning the ground-truthing data set
+    sts <- unlist(lapply(1:length(unique(tmp$site)), function(y){
+     len <- length(unique(tmp$indiv[grep(unique(tmp$site)[y], tmp$indiv)]))
+     if(len > 2) return(as.character(unique(tmp$site)[y]))
+    }))
+    # sts
+    
+    # filter test labels to remove birds when 2 or less remain for a site
+    test_labels <- unique(test_labels[grep(paste(sts, collapse = "|"), test_labels)])
+    
+    rf_df[[x]]$set[grep(paste(paste("^", test_labels, "$", sep = ""), collapse = "|"), rf_df[[x]]$indiv)] <- "test_site"
+    
+    # if any calls remain that were not assigned to validation or final test data sets, give these calls a different label
+    if(length( rf_df[[x]]$set[grep("^test$", rf_df[[x]]$set)]) > 1){
+      rf_df[[x]]$set[grep("^test$", rf_df[[x]]$set)] <- "not_used4testing"
+    }
+    
+  }
+    
+    return(rf_df[[x]])
+  
+}))
+
+names(sup_rf_test) <- spp_train
+
+saveRDS(sup_rf_test, file.path(path, "sup_rf_test.RDS"))
+
+```
+
+```{r echo = TRUE, eval = TRUE}
+
+sup_rf_test <- readRDS(file.path(path, "sup_rf_test.RDS"))
+
+```
+
+Check how many calls were assigned to data sets across species. Looks good!
+```{r echo = TRUE, eval = TRUE}
+
+sapply(1:length(spp_train), function(x){
+  table(sup_rf_test[[x]]$set)
+})
+
+```
+
+We performed random forests validation.
+```{r echo = TRUE, eval = FALSE}
+
+final_model_list <- readRDS(file.path(path, "final_ranger_models_2spp.RDS"))
+seed <- 401
+spp <- c("MNK", "YNA")
+cores <- parallel::detectCores() - 2
+
+# x <- 1
+rf_validatn_proxm <- invisible(pblapply(1:length(spp), function(x){
+  
+  if(grepl("MNK", spp[x])){
+    response_col <- "indiv"
+  } else if(grepl("YNA", spp[x])) {
+    response_col <- "regional_dialect"
+  }
+  
+  # filter by ground-truthing test set and variables retained in the final rf model
+  # need to change some parameter names to match among predictor data set and final model object, as I changed names slightly after running model 1
+   final_model_list[[x]]$xNames <- gsub("cepf", "cep", final_model_list[[x]]$xNames)
+   
+   final_model_list[[x]]$xNames <- gsub("spentDTW", "spent_DTW", final_model_list[[x]]$xNames)
+  
+  names(sup_rf_test[[x]]) <- gsub("spentDTW", "spent_DTW", names(sup_rf_test[[x]]))
+  
+  final_model_list[[x]]$forest$independent.variable.names <- gsub("spentDTW", "spent_DTW", final_model_list[[x]]$forest$independent.variable.names)
+  
+  final_model_list[[x]]$forest$independent.variable.names <- gsub("cepf", "cep", final_model_list[[x]]$forest$independent.variable.names)
+  
+  test_df <- sup_rf_test[[x]][grep("validatn", sup_rf_test[[x]]$set), grep(paste(paste("^", c(response_col, final_model_list[[x]]$xNames), "$", sep = ""), collapse = "|"), names(sup_rf_test[[x]]))]
+  
+  # extract proximity matrix
+  set.seed(seed)
+  proxm <- edarf::extract_proximity(final_model_list[[x]], test_df)
+  return(proxm)
+  
+}))
+
+names(rf_validatn_proxm) <- spp
+
+saveRDS(rf_validatn_proxm, file.path(path, "rf_validatn_proxm.RDS"))
+
+```
+
+Perform t-SNE on random forests proximity matrices for visualization.
+```{r echo = TRUE, eval = FALSE}
+
+rf_validatn_proxm <- readRDS(file.path(path, "rf_validatn_proxm.RDS"))
+  
+tsne_rf_validatn <- invisible(pblapply(1:length(spp), function(x){
+  
+  X <- stats::as.dist(1 - rf_validatn_proxm[[x]], diag = TRUE, upper = TRUE)
+  
+  tmp <- list()
+  
+  # embed in 2 dimensions for visualization with intermediate perplexity
+  tmp <- lapply(1:10, function(n){
+    Rtsne::Rtsne(X, dims = 2, pca = FALSE, max_iter = 5000, perplexity = round((nrow(sup_rf_test[[x]][grep("validatn", sup_rf_test[[x]]$set), ]) - 1)/4), is_distance = TRUE, theta = 0.0)
+  })
+  # str(tmp)
+    
+  cat(paste("spp = ", spp[x], "\n", sep = ""))
+  
+  KL <- sapply(1:length(tmp), function(i){
+    tmp[[i]]$itercosts[100]
+  }, simplify = TRUE)
+  
+  # overwrite tmp with the solution that minimized KL
+  tmp <- tmp[[which(KL == min(KL))]]
+  return(tmp)
+
+}))
+
+names(tsne_rf_validatn) <- spp
+
+saveRDS(tsne_rf_validatn, file.path(path, "tsne_rf_validatn_2spp.RDS"))
+
+```
+
+We continued model validation via model-based clustering on random forests acoustic similarity for the MNK and YNA models. This was a useful approach to obtain classification accuracy for the MNK model trained on individuals, since the training class labels did did not correspond to the validation test data set (new individuals), and as such, we could not use labels predicted by random forests to assess classification accuracy. However, the class labels for the validation data set of the YNA model (trained on dialects) corresponded to the class labels used in training, so we assessed model performance by evaluating labels predicted by random forests as well as model-based clustering.
+
+We performed model-based clustering by restricting the number of clusters to the true number of groups (e.g. individuals or dialects) in the ground-truthing test data sets.
+```{r echo = TRUE, eval = FALSE}
+
+rf_validatn_proxm <- readRDS(file.path(path, "rf_validatn_proxm.RDS"))
+
+seed <- 401
+
+# maximum clusters to explore
+G <- list(1:4, 1:2)
+
+# x <- 1
+mBIC_res <- invisible(pblapply(1:length(spp), function(x){
+  set.seed(seed)
+  mBIC <- mclust::Mclust(data = stats::as.dist(1 - rf_validatn_proxm[[spp[x]]], diag = TRUE, upper = TRUE), G = G[[x]])
+
+}))
+
+names(mBIC_res) <- spp
+
+saveRDS(mBIC_res, file.path(path, "mBIC_res_2spp_restricted.RDS"))
+
+```
+
+Check out model-based clustering results. Here the optimal number of clusters matches the true number of clusters in the data, but we needed to also visualize results to see how well clustering assignments reflected individual or dialect identity.
+```{r echo = TRUE, eval = TRUE}
+
+tsne_rf_validatn <- readRDS(file.path(path, "tsne_rf_validatn_2spp.RDS"))
+mBIC_res <- readRDS(file.path(path, "mBIC_res_2spp_restricted.RDS"))
+
+```
+
+```{r echo = TRUE, eval = TRUE}
+
+invisible(sapply(1:length(spp), function(x){
+
+  cat(paste(spp[x], "\n", sep = ""))
+  print(summary(mBIC_res[[x]]))
+  print(mBIC_res[[x]]$modelName)
+  print(mBIC_res[[x]]$G)
+  cat("\n")
+  
+}))
+
+```
+
+#### Figure S4.11: Random Forests Validation by Model-based Clustering
+
+Visuals of ground-truthing with model-based clustering on random forests proximity matrices reduced by t-SNE.
+```{r echo = TRUE, eval = TRUE, dpi = 100}
+
+n <- 12
+# colors for clustering
+clust_cols <- c("#F8766D", "#00BFC4", terrain.colors(n)[1], topo.colors(n)[2], heat.colors(n)[1], heat.colors(n)[8])
+
+# x <- 3
+invisible(pblapply(1:length(spp), function(x){
+
+    tsne <- tsne_rf_validatn[[x]]
+    
+    # subset predictor data with metadata by the ground-truthing test data set
+    tmp_df <- droplevels(sup_rf_test[[x]][grep("validatn", sup_rf_test[[x]]$set), ])
+
+    # create a data frame with t-SNE embeddings for plotting
+    if(grepl("MNK", spp[x])){
+      df <- data.frame(X = tsne$Y[, 1], Y = tsne$Y[, 2], indiv = as.character(tmp_df$indiv), site = as.character(tmp_df$site), cluster = as.factor(mBIC_res[[x]]$classification))
+  } else if(grepl("YNA", spp[x])){
+    df <- data.frame(X = tsne$Y[, 1], Y = tsne$Y[, 2], indiv = as.character(tmp_df$indiv), site = as.character(tmp_df$site), regional_dialect = as.character(tmp_df$regional_dialect), cluster = as.factor(mBIC_res[[x]]$classification))
+  }
+
+    # initialize aesthetics 
+    if(grepl("MNK", spp[x])){
+      
+      # shapes by individual
+      shps <- c(0, 1, 2, 6)
+    
+    } else if(grepl("YNA", spp[x])){
+      
+      # shapes by dialect
+      shps <- c(0, 1, 2)
+      
+    }
+
+    if(grepl("MNK", spp[x])){
+
+      # convex hull polygons by individual
+      hulls <- plyr::ddply(df, "indiv", function(z){
+        z[chull(z$X, z$Y), ]
+      })
+
+    } else if(grepl("YNA", spp[x])){
+
+      # convex hull polygons by dialect
+      hulls <- plyr::ddply(df, "regional_dialect", function(z){
+        z[chull(z$X, z$Y), ]
+      })
+    }
+  
+    # make graphic
+    if(grepl("MNK", spp[x])){
+
+    gg <- ggplot(df, aes(x = X, y = Y)) + 
+      
+      geom_point(aes(fill = indiv, shape = indiv), size = 4) +
+       
+        geom_point(aes(color = cluster), shape = 19, size = 2) +
+       
+        geom_polygon(data = hulls, aes(x = X, y = Y, fill = indiv), alpha = 0.2) + 
+      scale_color_manual(values = clust_cols) +
+      scale_fill_manual(values = rep(gray.colors(n)[1], length(unique(df$indiv)))) +
+      scale_shape_manual(values = shps)
+
+    } else if(grepl("YNA", spp[x])){
+      
+     gg <- ggplot(df, aes(x = X, y = Y)) + 
+       
+       geom_point(aes(fill = regional_dialect, shape = site), size = 4) +
+       
+       geom_polygon(data = hulls, aes(x = X, y = Y, fill = regional_dialect), alpha = 0.2) +
+    
+       geom_point(aes(color = cluster), shape = 19, size = 2) +
+       
+       # geom_text(aes(x = X, y = Y - 2.7, label = indiv)) +
+       
+      scale_color_manual(values = clust_cols) +
+       scale_fill_manual(values = rep(gray.colors(n)[1], length(unique(df$regional_dialect)))) +
+      scale_shape_manual(values = shps) + guides(fill = FALSE)
+      
+    }
+
+   gg <- gg + xlab("t-SNE Dimension 1") + ylab("t-SNE Dimension 2") + 
+    theme_AcousticSpace() +
+    ggtitle(paste(spp[x], sep = " "))
+
+    print(gg)
+  
+
+}))
+
+
+```
+
+22/24 or 91.7% of calls were correctly classified for MNK, demonstrating that the random forests model learned patterns of individual distinctiveness and consistency. The YNA_dialect model performed beautifully, with 100% classification accuracy. 
+
+We also checked out classification performance of the YNA_dialect model, which was possible because the training and test data shared the same classes (Northern or Southern dialect).
+```{r echo = TRUE, eval = TRUE}
+
+final_model_list <- readRDS(file.path(path, "final_ranger_models_2spp.RDS"))
+sup_rf_test <- readRDS(file.path(path, "sup_rf_test.RDS"))
+seed <- 401
+
+```
+
+```{r echo = TRUE, eval = TRUE}
+
+response_col <- "regional_dialect"
+
+# make parameter names match between random forests object and predictor data set
+final_model_list[["YNA"]]$xNames <- gsub("cepf", "cep", final_model_list[["YNA"]]$xNames)
+   
+final_model_list[["YNA"]]$xNames <- gsub("spentDTW", "spent_DTW", final_model_list[["YNA"]]$xNames)
+
+names(sup_rf_test[["YNA"]]) <- gsub("spentDTW", "spent_DTW", names(sup_rf_test[["YNA"]]))
+  
+final_model_list[["YNA"]]$forest$independent.variable.names <- gsub("spentDTW", "spent_DTW", final_model_list[["YNA"]]$forest$independent.variable.names)
+  
+final_model_list[["YNA"]]$forest$independent.variable.names <- gsub("cepf", "cep", final_model_list[["YNA"]]$forest$independent.variable.names)
+
+# subset the predictor data set by the validation calls
+test_df <- sup_rf_test[["YNA"]][grep("validatn", sup_rf_test[["YNA"]]$set), grep(paste(paste("^", c(response_col, final_model_list[["YNA"]]$xNames), "$", sep = ""), collapse = "|"), names(sup_rf_test[["YNA"]]))]
+
+# perform random forests prediction on the validation calls
+predictn <- predict(final_model_list[["YNA"]], test_df, seed = seed)
+tmp <- as.data.frame(predictions(predictn))
+
+classes <- sapply(1:nrow(test_df), function(x){
+  ifelse(tmp[x, grep("Nor", names(tmp))] > 0.5, "Nor", "Sou")
+})
+
+# visualize the confusion matrix
+confusionMatrix(as.factor(classes), as.factor(test_df$regional_dialect))$table
+
+```
+
+The YNA_dialect random forests model also classified the validation calls by regional dialect with 100% accuracy. 
+
+## Summary of Model Validation
+
+In sum, the model-based clustering results allowed us to evaluate the biological relevance of random forests models. The MNK model trained on individuals learned biologically relevant acoustic similarity patterns. The YNA model trained on dialects had great validation performance. 
+
+## Predicting Similarity at Site Scale with Random Forests
+
+We predicted acoustic similarity for random forests test data sets across species.
+```{r echo = TRUE, eval = TRUE}
+
+final_model_list <- readRDS(file.path(path, "final_ranger_models_2spp.RDS"))
+
+seed <- 401
+spp <- c("MNK", "YNA")
+names(final_model_list) <- spp
+cores <- parallel::detectCores() - 2
+
+```
+
+Prepare final test data sets and check total number of calls used for this testing step.
+```{r echo = TRUE, eval = FALSE}
+
+# add a set variable to MNK_site calls
+dim(sup_rf_pp[[2]])
+sup_rf_pp[[2]]$set <- "test_site"
+
+# combine final predictor data sets
+sup_rf_test_site <- list(sup_rf_pp[[2]], sup_rf_test[["YNA"]])
+
+saveRDS(sup_rf_test_site , file.path(path, "sup_rf_test_site.RDS"))
+
+```
+
+```{r echo = TRUE, eval = TRUE}
+
+sup_rf_test_site <- readRDS(file.path(path, "sup_rf_test_site.RDS"))
+
+```
+
+```{r echo = TRUE, eval = TRUE}
+
+invisible(sapply(1:length(spp), function(x){
+  cat(paste(spp[x], " - ", length(sup_rf_test_site[[x]]$set[grep("test_site", sup_rf_test_site[[x]]$set)]), "\n", sep = ""))
+}))
+
+```
+
+We ran test calls down the final random forest model per species and retained the proximity matrix as the predicted acoustic similarity.
+```{r echo = TRUE, eval = FALSE}
+
+rf_final_test <- invisible(pblapply(1:length(spp), function(x){
+  
+  if(grepl("MNK", spp[x])){
+    response_col <- "indiv"
+  } else if(grepl("YNA", spp[x])){
+    response_col <- "regional_dialect"
+  }
+  
+  # filter by ground-truthing test set and variables retained in the final rf model
+   final_model_list[[x]]$xNames <- gsub("cepf", "cep", final_model_list[[x]]$xNames)
+   
+   final_model_list[[x]]$xNames <- gsub("spentDTW", "spent_DTW", final_model_list[[x]]$xNames)
+  
+  names(sup_rf_test_site[[x]]) <- gsub("spentDTW", "spent_DTW", names(sup_rf_test_site[[x]]))
+  
+  final_model_list[[x]]$forest$independent.variable.names <- gsub("spentDTW", "spent_DTW", final_model_list[[x]]$forest$independent.variable.names)
+  
+  final_model_list[[x]]$forest$independent.variable.names <- gsub("cepf", "cep", final_model_list[[x]]$forest$independent.variable.names)
+  
+  test_df <- sup_rf_test_site[[x]][grep("test_site", sup_rf_test_site[[x]]$set), grep(paste(paste("^", c(response_col, final_model_list[[x]]$xNames), "$", sep = ""), collapse = "|"), names(sup_rf_test_site[[x]]))]
+  
+  # extract proximity matrix
+  proxm <- edarf::extract_proximity(final_model_list[[x]], test_df)
+  return(proxm)
+  
+}))
+
+names(rf_final_test) <- spp
+
+saveRDS(rf_final_test, file.path(path, "rf_final_test.RDS"))
+
+```
+
+Perform t-SNE on random forests proximity matrices for visualization.
+```{r echo = TRUE, eval = TRUE}
+
+rf_final_test <- readRDS(file.path(path, "rf_final_test.RDS"))
+
+```
+
+```{r echo = TRUE, eval = FALSE}
+
+tsne_rf_final_test <- invisible(pblapply(1:length(spp), function(x){
+  
+  X <- stats::as.dist(1 - rf_final_test[[x]], diag = TRUE, upper = TRUE)
+  
+  tmp <- list()
+  
+  # embed in 2 dimensions for visualization with intermediate perplexity
+  tmp <- lapply(1:10, function(n){
+    Rtsne::Rtsne(X, dims = 2, pca = FALSE, max_iter = 5000, perplexity = round((nrow(sup_rf_test_site[[x]][grep("test_site", sup_rf_test_site[[x]]$set), ]) - 1)/4), is_distance = TRUE, theta = 0.0)
+  })
+  # str(tmp)
+    
+  cat(paste("spp = ", spp[x], "\n", sep = ""))
+  
+  KL <- sapply(1:length(tmp), function(i){
+    tmp[[i]]$itercosts[100]
+  }, simplify = TRUE)
+  
+  # overwrite tmp with the solution that minimized KL
+  tmp <- tmp[[which(KL == min(KL))]]
+  return(tmp)
+
+}))
+
+names(tsne_rf_final_test) <- spp
+
+saveRDS(tsne_rf_final_test, file.path(path, "tsne_rf_final_test_2spp.RDS"))
+
+```
+
+We performed model-based clustering as a means of determining how clusters derived from random forests acoustic similarity reflected site identity. We used only 3 sites (PIED, PEIX, OJOS) from the MNK data set, representing the westernmost, middle and easternmost end of the sampling transect.
+```{r echo = TRUE, eval = TRUE}
+
+tsne_rf_final_test_2spp <- readRDS(file.path(path, "tsne_rf_final_test_2spp.RDS"))
+
+rf_final_test <- readRDS(file.path(path, "rf_final_test.RDS"))
+
+```
+
+```{r echo = TRUE, eval = FALSE}
+
+spp <- c("MNK", "YNA")
+
+# make dimension names for MNK to facilitate parsing for a few sites
+sites <- unique(as.character(mnk_site$General_site))
+mnk_site$site_uniq_ID <- unlist(lapply(1:length(sites), function(x){
+  
+  tmp <- mnk_site[grep(sites[x], mnk_site$General_site), ]
+
+  return(paste(sites[x], seq(1, nrow(tmp)), sep = "_"))
+
+}))
+
+seed <- 401
+
+# restrict clusters per species to the number of groups we know are in the data, to see how well clusters match group identity
+G <- list(1:3, 1:3)
+
+mBIC_res <- invisible(pblapply(1:length(spp), function(x){
+  set.seed(seed)
+  
+  if(grepl("MNK", spp[x])){
+    
+    dimnames(rf_final_test[[spp[x]]]) <- list(mnk_site$site_uniq_ID, mnk_site$site_uniq_ID)
+    
+    tmp <- rf_final_test[[spp[x]]][grep("PIED|PEIX|OJOS", dimnames(rf_final_test[[spp[x]]])[[1]]), grep("PIED|PEIX|OJOS", dimnames(rf_final_test[[spp[x]]])[[2]])]
+  
+  # parse for final test data sets
+  } else if(!grepl("MNK", spp[x])){
+    nms <- as.character(sup_rf_test_site[[x]]$indiv[grep("test_site", sup_rf_test_site[[x]]$set)])
+    dimnames(rf_final_test[[spp[x]]]) <- list(nms, nms)
+    
+    ids <- as.character(sup_rf_test_site[[x]]$indiv[grep("test_site", sup_rf_test_site[[x]]$set)])
+    indices <- grep(paste(paste("^", ids, "$", sep = ""), collapse = "|"), dimnames(rf_final_test[[spp[x]]])[[1]])
+    
+    tmp <- rf_final_test[[spp[x]]][indices, indices]
+  }
+  
+  mBIC <- mclust::Mclust(data = stats::as.dist(1 - tmp, diag = TRUE, upper = TRUE), G = G[[x]])
+
+}))
+
+names(mBIC_res) <- spp
+
+saveRDS(mBIC_res, file.path(path, "mBIC_res_2spp_rf_testing.RDS"))
+
+```
+
+Check out model-based clustering results. Here the optimal number of clusters matches the true number of clusters in the data, but we need to visualize results to see if clusters reflect individual or dialect identity.
+```{r echo = TRUE, eval = TRUE}
+
+mBIC_res <- readRDS(file.path(path, "mBIC_res_2spp_rf_testing.RDS"))
+
+```
+
+```{r echo = TRUE, eval = TRUE}
+
+invisible(sapply(1:length(spp), function(x){
+
+  cat(paste(spp[x], "\n", sep = ""))
+  print(summary(mBIC_res[[x]]))
+  print(mBIC_res[[x]]$modelName)
+  print(mBIC_res[[x]]$G)
+  cat("\n")
+  
+}))
+
+```
+
+#### Supplementary Figure 3: Random Forests Site Scale Acoustic Similarity
+
+Visuals of random forests acoustic similarity matrices reduced by t-SNE. This was part of Supplementary Figure 3 in supplementary materials. 
+```{r echo = TRUE, eval = TRUE, dpi = 100}
+
+n <- 12
+
+# fill colors and shapes by site
+site_cols <- c(gray.colors(n)[1], gray.colors(n)[6], gray.colors(n)[9])
+shps <- c(21, 22, 24)
+
+# colors for clustering
+clust_cols <- c("#F8766D", "#00BFC4", terrain.colors(n)[1], topo.colors(n)[2], heat.colors(n)[1], heat.colors(n)[8])
+
+# x <- 2
+invisible(pblapply(1:length(spp), function(x){
+
+  tsne <- as.data.frame(tsne_rf_final_test_2spp[[x]]$Y)
+
+  tsne$set <- sup_rf_test_site[[x]]$set[grep("test_site", sup_rf_test_site[[x]]$set)]
+  
+  tsne <- tsne[grep("test_site", tsne$set), ]
+    
+  # subset predictor data with metadata by the test data set
+  tmp_df <- droplevels(sup_rf_test_site[[x]][grep("test_site", sup_rf_test_site[[x]]$set), ])
+  # str(tmp_df)
+
+  # create a data frame with t-SNE embeddings for plotting
+  if(grepl("MNK", spp[x])){
+    
+    df <- data.frame(X = tsne[, 1], Y = tsne[, 2], indiv = as.character(tmp_df$indiv), site = as.character(tmp_df$site))
+    
+    # subset by the 3 sites used for visualization in MNK 44100 Hz analyses
+    df <- droplevels(df[grep("PIED|PEIX|OJOS", df$site), ])
+    
+    # add cluster info
+    df <- data.frame(df, cluster = as.factor(mBIC_res[[x]]$classification))
+  
+  } else if(grepl("YNA", spp[x])){
+    df <- data.frame(X = tsne[, 1], Y = tsne[, 2], indiv = as.character(tmp_df$indiv), site = as.character(tmp_df$site), regional_dialect = as.character(tmp_df$regional_dialect), cluster = as.factor(mBIC_res[[x]]$classification))
+  }
+
+    # convex hull polygons by site
+    hulls <- plyr::ddply(df, "site", function(z){
+      z[chull(z$X, z$Y), ]
+    })
+  
+    gg <- ggplot(df, aes(x = X, y = Y)) + 
+      
+      geom_polygon(data = hulls, aes(x = X, y = Y, fill = site), alpha = 0.6) +
+      
+      geom_point(aes(fill = site, shape = site), size = 6) +
+       
+      geom_point(aes(color = cluster), shape = 19, size = 3) +
+       
+      scale_color_manual(values = clust_cols) +
+      scale_fill_manual(values = site_cols) +
+      scale_shape_manual(values = shps) 
+    
+    gg <- gg + guides(fill = guide_legend(title = "Site"), shape = guide_legend(title = "Site"), color = guide_legend(title = "Cluster", override.aes = list(size = 2)))
+
+    gg <- gg + xlab("t-SNE Dimension 1") + ylab("t-SNE Dimension 2")
+    gg <- gg + theme_AcousticSpace() +
+    ggtitle(paste(spp[x], sep = " "))
+   
+    print(gg)
+  
+}))
+
+
+```
+
+These visuals confirm that acoustic similarity is very weak at the site scale for MNK (model-based clustering on random forests acoustic similarity cannot reconstruct patterns of site identity), and stronger for YNA. The more distant site in acoustic space for YNA is a Nicaraguan dialect site (pink cluster). This analysis does a pretty good job at reconstructing patterns of site identity within the Northern dialect calls (blue and green clusters).
+
+We repeated the clustering analysis for SPCC.
+```{r echo = TRUE, eval = FALSE}
+
+spp <- c("MNK_site", "YNA")
+dfs <- list(mnk_site, yna)
+
+xc_mat_list <- sapply(1:length(spp), function(x){
+  if(grepl("MNK", spp[x])){
+    tmp <- readRDS(paste(paste("xc_mat", spp[x], sep = "_"), ".RDS", sep = ""))
+  dimnames(tmp) <- list(as.character(dfs[[x]]$site), as.character(dfs[[x]]$site))
+  } else {
+    tmp <- readRDS(paste(paste("xc_mat", spp[x], sep = "_"), ".RDS", sep = ""))
+  dimnames(tmp) <- list(as.character(dfs[[x]]$bird_ID), as.character(dfs[[x]]$bird_ID))
+  }
+  
+  return(tmp)
+})
+
+```
+
+Subset ech SPCC matrix by the sites in the random forests test data sets.
+```{r echo = TRUE, eval = FALSE}
+
+spp <- c("MNK", "YNA")
+
+xc_mat_list2 <- sapply(1:length(spp), function(x){
+  
+  if(grepl("MNK", spp[x])){
+    return(xc_mat_list[[x]])
+  } else if(grepl("YNA", spp[x])){
+    
+    ids <- as.character(sup_rf_test_site[[x]]$indiv[grep("test_site", sup_rf_test_site[[x]]$set)])
+    
+    # ids
+    indices <- grep(paste(paste("^", ids, "$", sep = ""), collapse = "|"),  dimnames(xc_mat_list[[x]])[[1]])
+    return(xc_mat_list[[x]][indices, indices])
+  } 
+  
+})
+
+names(xc_mat_list2) <- spp
+
+saveRDS(xc_mat_list2, file.path(path, "xc_mat_2spp_filt.RDS"))
+
+```
+
+We performed t-SNE on SPCC proximity matrices for visualization.
+```{r echo = TRUE, eval = FALSE}
+
+xc_mat_list <- readRDS(file.path(path, "xc_mat_2spp_filt.RDS"))
+
+tsne_spcc <- invisible(pblapply(1:length(spp), function(x){
+  
+  X <- stats::as.dist(1 - xc_mat_list[[x]], diag = TRUE, upper = TRUE)
+  # dim(X)
+  
+  tmp <- list()
+  
+  # embed in 2 dimensions for visualization
+  # nrow(sup_rf_test_site[[x]][grep("test_site", sup_rf_test_site[[x]]$set), ])
+  n <- round((dim(X)[1] - 1)/4)
+  
+  plx <- ifelse(n > 50, 45, n)
+  
+  tmp <- lapply(1:10, function(n){
+    Rtsne::Rtsne(X, dims = 2, pca = FALSE, max_iter = 5000, perplexity = plx, is_distance = TRUE, theta = 0.0)
+  })
+  # str(tmp)
+    
+  cat(paste("spp = ", spp[x], "\n", sep = ""))
+  
+  KL <- sapply(1:length(tmp), function(i){
+    tmp[[i]]$itercosts[100]
+  }, simplify = TRUE)
+  
+  # overwrite tmp with the solution that minimized KL
+  tmp <- tmp[[which(KL == min(KL))]]
+  return(tmp)
+
+}))
+
+names(tsne_spcc) <- spp
+
+saveRDS(tsne_spcc, file.path(path, "tsne_spcc_2spp.RDS"))
+
+```
+
+We performed model-based clustering as a means of determining how clusters derived from SPCC acoustic similarity reflected site identity. We used the same 3 sites from the MNK data set as above.
+```{r echo = TRUE, eval = TRUE}
+
+xc_mat_list <- readRDS(file.path(path, "xc_mat_2spp_filt.RDS"))
+
+```
+
+```{r echo = TRUE, eval = FALSE}
+
+spp <- c("MNK", "YNA")
+seed <- 401
+
+# restrict clusters per species to the number of groups we know are in the data, to see how well clusters match group identity
+G <- list(1:3, 1:3)
+
+# x <- 2
+mBIC_res <- invisible(pblapply(1:length(spp), function(x){
+  set.seed(seed)
+ 
+  mBIC <- mclust::Mclust(data = stats::as.dist(1 - xc_mat_list[[x]], diag = TRUE, upper = TRUE), G = G[[x]])
+
+}))
+
+names(mBIC_res) <- spp
+
+saveRDS(mBIC_res, file.path(path, "mBIC_res_SPCC_2spp_restricted.RDS"))
+
+```
+
+Check out model-based clustering results. Here the optimal number of clusters matches the true number of clusters in the data, but we need to visualize results to see if clusters reflect individual or dialect identity.
+```{r echo = TRUE, eval = TRUE}
+
+mBIC_res <- readRDS(file.path(path, "mBIC_res_SPCC_2spp_restricted.RDS"))
+tsne_spcc <- readRDS(file.path(path, "tsne_spcc_2spp.RDS"))
+
+```
+
+```{r echo = TRUE, eval = TRUE}
+
+invisible(sapply(1:length(spp), function(x){
+
+  cat(paste(spp[x], "\n", sep = ""))
+  print(summary(mBIC_res[[x]]))
+  print(mBIC_res[[x]]$modelName)
+  print(mBIC_res[[x]]$G)
+  cat("\n")
+  
+}))
+
+```
+
+#### Supplementary Figure 4: SPCC Site Scale Acoustic Similarity
+
+We made visuals of SPCC acoustic similarity matrices reduced by t-SNE with the model-based clustering results. This was also part of Supplementary Figure 4 in supplementary materials. 
+```{r echo = TRUE, eval = TRUE, dpi = 100}
+
+n <- 12
+
+# colors for clustering
+clust_cols <- c("#F8766D", "#00BFC4", terrain.colors(n)[1], topo.colors(n)[2], heat.colors(n)[1], heat.colors(n)[8])
+
+invisible(pblapply(1:length(spp), function(x){
+
+  tsne <- as.data.frame(tsne_spcc[[x]]$Y)
+
+  tsne$set <- sup_rf_test_site[[x]]$set[grep("test_site", sup_rf_test_site[[x]]$set)]
+  
+  tsne <- tsne[grep("test_site", tsne$set), ]
+    
+  # subset predictor data with metadata by the test data set
+  tmp_df <- droplevels(sup_rf_test_site[[x]][grep("test_site", sup_rf_test_site[[x]]$set), ])
+
+  # create a data frame with t-SNE embeddings for plotting
+  if(grepl("MNK", spp[x])){
+    
+    df <- data.frame(X = tsne[, 1], Y = tsne[, 2], indiv = as.character(tmp_df$indiv), site = as.character(tmp_df$site))
+    
+    # add cluster info
+    df <- data.frame(df, cluster = as.factor(mBIC_res[[x]]$classification))
+    
+    # subset by the 3 sites used for visualization in MNK 44100 Hz analyses
+    df <- droplevels(df[grep("PIED|PEIX|OJOS", df$site), ])
+
+  } else if(grepl("YNA", spp[x])){
+    df <- data.frame(X = tsne[, 1], Y = tsne[, 2], indiv = as.character(tmp_df$indiv), site = as.character(tmp_df$site), regional_dialect = as.character(tmp_df$regional_dialect), cluster = as.factor(mBIC_res[[x]]$classification))
+  }
+
+   # initialize aesthetics
+  # fill colors by site
+  # site_cols <- c("#F8766D", "#00BFC4", terrain.colors(n)[1])
+  site_cols <- c(gray.colors(n)[1], gray.colors(n)[6], gray.colors(n)[9])
+      
+    # shapes and colors by site
+    shps <- c(21, 22, 24)
+    
+    # convex hull polygons by site
+    hulls <- plyr::ddply(df, "site", function(z){
+      z[chull(z$X, z$Y), ]
+    })
+  
+    gg <- ggplot(df, aes(x = X, y = Y)) + 
+      
+      geom_polygon(data = hulls, aes(x = X, y = Y, fill = site), alpha = 0.6) +
+      
+      geom_point(aes(fill = site, shape = site), size = 6) +
+       
+      geom_point(aes(color = cluster), shape = 19, size = 3) +
+       
+      scale_color_manual(values = clust_cols) +
+      scale_fill_manual(values = site_cols) +
+      scale_shape_manual(values = shps)
+      
+    gg <- gg + guides(fill = guide_legend(title = "Site"), shape = guide_legend(title = "Site"), color = guide_legend(title = "Cluster", override.aes = list(size = 2)))
+
+   gg <- gg + xlab("t-SNE Dimension 1") + ylab("t-SNE Dimension 2")
+   gg <- gg + theme_AcousticSpace() +
+    ggtitle(paste(spp[x], sep = " "))
+  
+    print(gg)
+  
+}))
+
+
+```
+
+# Comparing SPCC and Random Forests Between MNK and YNA
+
+```{r echo = TRUE, eval = TRUE}
+
+rf_final_test <- readRDS(file.path(path, "rf_final_test.RDS"))
+sup_rf_test_site <- readRDS(file.path(path, "sup_rf_test_site.RDS"))
+
+```
+
+We parsed the random forests proximity matrices to yield average acoustic similarity at the site social scale.
+```{r echo = TRUE, eval = FALSE}
+
+spp <- c("MNK", "YNA")
+
+# x <- 1
+rf_site_stats <- pblapply(1:length(spp), function(x){
+  
+  metdf <- sup_rf_test_site[[x]][grep("test_site", sup_rf_test_site[[x]]$set), ]
+  dimnames(rf_final_test[[x]]) <- list(as.character(metdf$site), as.character(metdf$site))
+    
+  grp <- as.character(unique(metdf$site))
+    
+  # s <- 2
+  tmp_res <- pblapply(1:length(grp), function(s){
+   
+    indices <- grep(paste("^", grp[s], "$", sep = ""), dimnames(rf_final_test[[x]])[[1]])
+    
+    # within group values
+    tmp <- rf_final_test[[x]][indices, indices]
+    tmp[tmp == 1] <- NA # ensure diagonals will not be included in means
+    
+    # outside of group values
+    tmp2 <- rf_final_test[[x]][-indices, indices]
+    tmp2[tmp2 == 1] <- NA
+    
+    # mean(tmp2[lower.tri(tmp2)])
+    
+    return(data.frame(spp = spp[x], id = grp[s], means = c(round(mean(tmp[lower.tri(tmp)], na.rm = TRUE), digits = 2), round(mean(tmp2[lower.tri(tmp2)], na.rm = TRUE), digits = 2)), type = c("within_group", "among_group"), asim_type = "Random Forests"))
+    
+  })
+  
+  return(rbindlist(tmp_res))
+  
+})
+
+rf_site_stats <- rbindlist(rf_site_stats)
+str(rf_site_stats)
+
+saveRDS(rf_site_stats, file.path(path, "rf_site_stats_2spp.RDS"))
+
+```
+
+```{r echo = TRUE, eval = TRUE}
+
+xc_mat_list <- readRDS(file.path(path, "xc_mat_2spp_filt.RDS"))
+
+```
+
+We repeated these calculations for SPCC across species at the site scale.
+```{r echo = TRUE, eval = FALSE}
+
+spcc_site_stats <- pblapply(1:length(spp), function(x){
+  
+  metdf <- sup_rf_test_site[[x]][grep("test_site", sup_rf_test_site[[x]]$set), ]
+  
+  dimnames(xc_mat_list[[x]]) <- list(as.character(metdf$site), as.character(metdf$site))
+  
+  grp <- as.character(unique(metdf$site))
+  
+  # s <- 2
+  tmp_res <- pblapply(1:length(grp), function(s){
+  
+    indices <- grep(paste("^", grp[s], "$", sep = ""), dimnames(xc_mat_list[[x]])[[1]])
+    
+    # within group values
+    tmp <- xc_mat_list[[x]][indices, indices]
+    tmp[tmp == 1] <- NA # ensure diagonal is not included in calculation below
+    
+    # outside of group values
+    tmp2 <- xc_mat_list[[x]][-indices, indices]
+    tmp2[tmp2 == 1] <- NA
+    
+    return(data.frame(spp = spp[x], id = grp[s], means = c(round(mean(tmp[lower.tri(tmp)], na.rm = TRUE), digits = 2), round(mean(tmp2[lower.tri(tmp2)], na.rm = TRUE), digits = 2)), type = c("within_group", "among_group"), asim_type = "SPCC"))
+    
+  })
+  
+  return(rbindlist(tmp_res))
+  
+})
+
+spcc_site_stats <- rbindlist(spcc_site_stats)
+str(spcc_site_stats)
+
+saveRDS(spcc_site_stats, file.path(path, "spcc_site_stats_2spp.RDS"))
+
+```
+
+We made a graphic to evaluate general patterns within and among sites across species and acoustic similarity methods.
+```{r echo = TRUE, eval = FALSE}
+
+rf_site_stats <- readRDS(file.path(path, "rf_site_stats_2spp.RDS"))
+spcc_site_stats <- readRDS(file.path(path, "spcc_site_stats_2spp.RDS"))
+
+```
+
+#### Supplementary Figure 3: SPCC vs. Random Forests Acoustic Similarity
+
+Supplementary Figure 3 in supplementary materials. 
+```{r echo = TRUE, eval = FALSE}
+
+df <- rbind(rf_site_stats, spcc_site_stats)
+spp <- as.character(unique(df$spp))
+
+type_diff <- lapply(1:length(spp), function(s){
+  
+  id <- unique(as.character(df$id[grep(paste("^", spp[s], sep = ""), as.character(df$spp))]))
+  asim_type <- as.character(unique(df$asim_type))
+  
+  res <- lapply(1:length(id), function(i){
+    res <- lapply(1:length(asim_type), function(a){
+    
+      inds <- which(grepl(paste(spp[s], "$", sep = ""), df$spp) & grepl(id[i], df$id) & grepl(asim_type[a], df$asim_type))
+      tmp <- df[inds, ]
+
+      diff <- tmp$means[grep("within", tmp$type)]/tmp$means[grep("among", tmp$type)]
+    if(length(diff) != 1){
+      diff <- NA
+    }
+    
+    return(data.frame(spp = spp[s], id = id[i], asim_type = asim_type[a], diff = diff))
+    
+    })
+    return(rbindlist(res))
+  })
+  
+  return(rbindlist(res))
+})
+
+type_diff <- rbindlist(type_diff)
+# str(type_diff)
+
+# organize levels for boxplot as desired
+type_diff$asim_type <- factor(type_diff$asim_type, levels = c("SPCC", "Random Forests"))
+
+saveRDS(type_diff, file.path(path, "compare_SPCC_RF_stats.RDS"))
+
+```
+
+```{r echo = TRUE, eval = TRUE, dpi = 100}
+
+type_diff <- readRDS(file.path(path, "compare_SPCC_RF_stats.RDS"))
+
+ggplot(type_diff) +
+  geom_boxplot(aes(x = spp, y = diff, fill = asim_type), color = "black", size = 0.5, outlier.size = 0.45) +
+  guides(shape = FALSE, fill = guide_legend(title = "Acoustic Similarity Method")) +
+  geom_hline(yintercept = 1, size = 0.5, linetype = "dashed", color = "black") +
+   theme(panel.background = element_rect(fill = "white"), plot.background = element_rect(fill = "white"), plot.title = element_text(size = 25, hjust = 0.5),
+        panel.grid.major.x = element_line(size = 0.5, colour = "white"), 
+        panel.grid.major.y = element_line(size = 0.01, colour = "black", linetype = "dashed"),
+        panel.grid.minor = element_line(size = 0.35, colour = "white"), 
+        axis.line = element_line(size = 0.45, colour = "black"), 
+        axis.title = element_text(size = 12), 
+        axis.text = element_text(size = 10), legend.position = "top", legend.title = element_text(size = 12), legend.text = element_text(size = 10), axis.ticks = element_line(size = 0.45)) + 
+  xlab("Species") + ylab("Ratio of mean acoustic similarity within vs. among sites")
+
+```
+
+# References
+
+    1. Guerra J. E., Cruz-Nieto J., Ortiz-Maciel S.G., & Wright T.F. 2008. Limited geographic variation in the vocalizations of the endangered thick-billed parrot: Implications for conservation strategies. The Condor 110(4), 639.
+    
+    2. Wright T.F. 1996. Regional dialects in the contact call of a parrot. Proc. R. Soc. Lond. B 263(1372), 867-872.
+    
+    3. van der Maaten, L., and Hinton, G. 2008. Visualizing data using t-SNE. Journal of Machine Learning Research 9, 2579–2605.
+    
+    4. van der Maaten, L. 2009. Learning a parametric embedding by preserving local structure. Journal of Machine Learning Research Proceedings Vol. 5 (AISTATS), 384–391.
+    
+    5. Shamir, L., Orlov, N., Eckley, D. M., Macura, T., Johnston, J., & Goldberg, I. G. 2008. Wndchrm - an open source utility for biological image analysis. Source Code for Biology and Medicine 3, 1–13.
+    
+    6. Soifua, Breckell. 2018. A Comparison of R, SAS, and Python Implementations of Random Forests. (Master's thesis). Logan, Utah: Utah State University. Retrieved from: https://digitalcommons.usu.edu/gradreports/1268.
+

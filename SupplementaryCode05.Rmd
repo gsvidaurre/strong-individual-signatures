@@ -1,0 +1,1388 @@
+---
+title: <center style="font-size:30px;font-style:normal;color:black;">Supplementary Code 5:</center>
+subtitle: <center style="font-size:30px;font-style:normal;color:#0E0E7D;">Additional Validation of Our Analytical Approach and Findings</center>
+ &nbsp;
+author: |
+  <center style="font-style:normal;">
+  <a style="font-size:22px;color:#337ab7;text-decoration: underline;"href="http://smith-vidaurre.com/"> Grace Smith-Vidaurre</a><sup><span style="font-size:12px;color:black;text-decoration:none!important;">1*</span></sup>, 
+  <a style="font-size:22px;color:#337ab7;text-decoration: underline;"href="http://marceloarayasalas.weebly.com">Marcelo Araya-Salas</a><sup><span style="font-size:12px;color:black;text-decoration:none!important;">2</span></sup>, 
+  <a style="font-size:22px;color:#337ab7;text-decoration: underline;"href="http://wrightbehaviorlab.org">Timothy F. Wright</a><sup><span style="font-size:12px;color:black;text-decoration:none!important;">1</span></sup></center>
+  &nbsp;
+  <center style="font-size:18px;font-style:normal;color:black;"><sup><span style="font-size:12px;color:black;">1</span></sup>Department of Biology, New Mexico State University, <sup><span style="font-size:12px;color:black;">2</span></sup>Recinto de Golfito, Universidad de Costa Rica</center>
+  <br />
+  <center style="font-size:18px;"><sup style="font-size:12px;">*</sup>gsvidaurre@gmail.com</center>
+  &nbsp;
+date: <center style="font-size:22px;font-style:normal;>`r format(Sys.time(), '%d %B, %Y')`</center>
+  <br />
+output: 
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float:
+      collapsed: false
+---
+
+<style type="text/css">
+
+a:hover {
+  color: #23527c !important;
+}
+
+h1.title {
+  font-size: 32px;
+  color: black;
+  font-weight: normal;
+}
+
+h1 {
+   color: black;
+   font-size: 26px;
+   font-weight: normal;
+}
+
+h2 {
+   color: black;
+   font-size: 24px;
+   font-weight: bold;
+}
+
+h3 {
+   color: black;
+   font-size: 20px;
+   font-weight: normal;
+}
+
+h4 {
+   color: black;
+   font-size: 20px;
+   font-weight: normal;
+}
+
+body{ /* Normal */
+      font-size: 18px;
+  }
+code.r{ /* Code block */
+    font-size: 18px;
+}
+</style>
+
+```{r setup, eval = TRUE, echo = FALSE}
+
+knitr::opts_knit$set(root.dir = "/media/owner/MYIOPSITTA/R/Uruguay2017_MonkParakeet_CallAnalysis/strong-individual-signatures/")
+
+```
+
+We performed additional validation of our analytical approach and findings. First, we performed an analysis of interobserver reliability in call classification at the individual scale across multiple observers. Second, we compared visual inspection, spectrographic cross-correlation (SPCC) and random forests as similarity methods. Finally, we asked whether or not a difference in social context between the individual and higher social scales could have skewed results for monk parakeets.
+
+Our overall results can be reproduced by using the data provided with this publication (extended selection tables for the subset of calls used for visual classification, and the matrix of visual similarity combined across observers). Some changes to this code may be necessary, such as directories used for analysis. Users should expect slight differences in results from some unsupervised or supervised machine learning methods, due to stochasticity associated with these methods.
+```{r echo = TRUE, eval = TRUE, message = FALSE}
+
+rm(list = ls())
+
+X <- c("tidyverse", "vegan", "pbapply", "dplyr", "data.table", "mclust", "effsize", "knitr", "warbleR")
+
+invisible(lapply(X, library, character.only = TRUE))
+
+theme_AcousticSpace <- function(){
+  theme(panel.background = element_rect(fill = "white"), plot.background = element_rect(fill = "white"), 
+        panel.grid.major = element_line(size = 1, colour = "white"), 
+        panel.grid.minor = element_line(size = 0.75, colour = "white"), 
+        axis.line = element_line(size = 0.45, colour = "black"), 
+        axis.title = element_text(size = 14), 
+        axis.text = element_text(size = 12))
+}
+
+```
+
+Set directory paths for analysis.
+```{r echo = TRUE, eval = TRUE}
+
+in_path_st <- "/media/owner/MYIOPSITTA/R/Uruguay2017_MonkParakeet_CallAnalysis/Data/visual-inspection/www"
+
+in_path_classes <- "/media/owner/MYIOPSITTA/R/Uruguay2017_MonkParakeet_CallAnalysis/Data/visual-inspection/classifications"
+
+out_path <- "/media/owner/MYIOPSITTA/R/Uruguay2017_MonkParakeet_CallAnalysis/Data/Site_Recordings"
+
+```
+
+Set general parameters. 
+```{r echo = TRUE, eval = TRUE}
+
+social_scales <- c("Individual", "Pair", "Flock", "Site")
+perms <- 9999
+cores <- parallel::detectCores() - 2
+seed <- 401
+
+```
+
+Read in .csv files of human classifications, obtained from Shiny app. 
+```{r echo = TRUE, eval = TRUE}
+
+files <- list.files(pattern = ".csv", path = in_path_classes)
+# files
+
+csvs <- lapply(1:length(files), function(x){ read.csv(file.path(in_path_classes, files[x])) })
+length(csvs)
+
+```
+
+# Inter-observer Reliability
+
+Here we asked how consistently human observers classified calls at the individual scale. This was the only social scale at which it was possible to calculate classification accuracy by human visual inspection.
+```{r echo = TRUE, eval = TRUE}
+
+# write a loop to extract individual scale information, assign individual IDs to classes by a majority rule and calculate classification accuracy per observer
+observs <- 1:length(csvs)
+
+classif_accur <- invisible(unlist(pblapply(observs, function(i){
+  
+  tmp <- t(csvs[[i]][grep("Individual", csvs[[i]]$social_scale), grep("class_", names(csvs[[i]]))])
+  tmp <- data.frame(class = row.names(tmp), spectros = tmp[, 1])
+
+  # iterate over classes to assign an individual ID to each class
+  class_IDs <- unlist(lapply(1:nrow(tmp), function(x){
+    
+    # obtain calls for the given class
+    calls <- as.character(tmp$spectros[x])
+    calls <- strsplit(calls, split = ";")[[1]]
+    
+    # obtain individual IDs from the spectrogram image names
+    indivs <- sapply(1:length(calls), function(z){
+      strsplit(strsplit(calls[z], split = "INDIV-")[[1]][2], split = "_")[[1]][1] 
+    })
+    
+    if(all(!is.na(indivs))){
+      # find the individual with the most spectrograms assiged to this class
+    # this individual ID will become assigned to the given class to facilitate calculating classification accuracy
+      itbl <- table(indivs)
+      m <- max(itbl)
+      class_ID <- names(itbl)[which(itbl == m)]
+    } else {
+      class_ID <- NA
+    }
+    
+    return(class_ID)
+    
+  }))
+  
+  
+  # if each class could be assigned a unique individual ID
+  if(all(!is.na(class_IDs)) & !any(duplicated(class_IDs))){
+    
+    tmp_class_IDs <- class_IDs
+   
+  # if some classes were left empty
+  } else if(any(is.na(class_IDs))){
+    
+    tmp_class_IDs <- class_IDs[!is.na(class_IDs)]
+  
+  # if some classes were evenly assigned to different individuals
+  } else if(any(duplicated(class_IDs)) & all(!is.na(class_IDs))){
+    
+    tmp_class_IDs <- class_IDs[!duplicated(class_IDs)]
+    
+  }
+  
+   wrong <- unlist(lapply(1:nrow(tmp), function(x){
+      
+      # obtain calls for the given class
+      calls <- as.character(tmp$spectros[x])
+      calls <- strsplit(calls, split = ";")[[1]]
+    
+      # obtain individual IDs from the spectrogram image names
+      indivs <- sapply(1:length(calls), function(z){
+       strsplit(strsplit(calls[z], split = "INDIV-")[[1]][2], split = "_")[[1]][1] 
+      })
+      
+      itbl <- table(indivs)
+      
+      wrong <- as.vector(itbl[which(names(itbl) != tmp_class_IDs[x])])
+      return(wrong)
+    
+    }))
+  wrong_class <- sum(wrong)  
+  
+  # extract the total number of calls classified
+  N <- sum(unlist(lapply(1:nrow(tmp), function(z){
+    calls <- as.character(tmp$spectros[z])
+    length(strsplit(calls, split = ";")[[1]])
+  })))
+  
+  # calculate classification accuracy over all calls
+  return(((N - wrong_class)/N)*100)
+  
+})))
+
+```
+
+### Classification Accuracy 
+
+```{r echo = TRUE, eval = TRUE}
+
+classif_accur
+
+mean(classif_accur)
+range(classif_accur)
+sd(classif_accur)
+
+```
+
+# Comparing Similarity Methods
+
+## Pre-process Shiny Visual Inspection Results
+
+Read in extended selection tables per social scale used in Shiny app. These will determine how calls will be ordered in matrices across social scales.
+```{r echo = TRUE, eval = FALSE}
+
+# read in the extended selection tables after moving them into the Shiny app working directory
+indiv_shiny_tbl <- readRDS(file.path(path = in_path_st, "indiv_scale_shiny_extended_seltable.RDS"))
+
+pair_shiny_tbl <- readRDS(file.path(path = in_path_st, "pair_scale_shiny_extended_seltable.RDS"))
+
+flock_shiny_tbl <- readRDS(file.path(path = in_path_st, "flock_scale_shiny_extended_seltable.RDS"))
+
+site_shiny_tbl <- readRDS(file.path(path = in_path_st, "site_scale_shiny_extended_seltable.RDS"))
+
+sel_tables <- list(indiv_shiny_tbl, pair_shiny_tbl, flock_shiny_tbl, site_shiny_tbl)
+
+```
+
+Write a function to convert human classifications into a list of binary matrices (one per social scale). 
+```{r echo = TRUE, eval = FALSE}
+
+df2binmat <- function(X, class_prefix){
+  
+  # iterate over social scales to make a list of binary matrices
+  mat_list <- invisible(pblapply(1:length(social_scales), function(i){
+    
+    # get all calls for the given social scale
+    sel_table <- sel_tables[[i]]
+    calls_df <- data.frame(call_ID = paste(sel_table$sound.files, "-1.jpeg", sep = ""))
+    
+    # now get the class labels for these calls
+    # first extract calls and classes for the given social scale
+     tmp <- droplevels(X[grep(paste("^", social_scales[i], "$", sep = ""), X$social_scale), ])
+    class_cols <- tmp[, grep(paste(paste("^", class_prefix, sep = ""), collapse = "|"), names(X))]
+    class_cols <- t(class_cols)
+    
+    # then iterate over rows and turn this into a data frame with one row per call
+    class_df <- data.table::rbindlist(lapply(1:nrow(class_cols), function(y){
+      calls_tmp <- unlist(strsplit(class_cols[y, ], split = ";"))
+      df <- data.frame(class_label = row.names(class_cols)[y], call_ID = calls_tmp)
+      return(df)
+    }))
+    
+    # iterate over rows of the calls data frame for the given social scale, pulling out class labels from the class data frame
+    final_df <- data.table::rbindlist(lapply(1:nrow(calls_df), function(y){
+      
+      call_tmp <- calls_df[y, ]
+      label <- as.character(class_df$class_label[grep(paste("^", call_tmp, "$", sep = ""), class_df$call_ID)])
+      
+      return(data.frame(call_ID = call_tmp, class_label = label, ID = as.character(sel_table$ID[y])))
+
+    }))
+
+    # iterate over each row in this data frame and compare the label of the given call to labels of all other calls
+    # this comparison is the same as asking whether or not calls were classified in the same group
+    # this will return a long binary vector that can be used to build the final matrix
+    class_comps <- unlist(lapply(1:nrow(calls_df), function(y){
+      as.numeric(final_df$class_label[y] == final_df$class_label)
+    }))
+    
+    # build the final matrix of human classifications, which contains binary encoding for whether or not calls were classified in the same group per observer and social scale
+    human_class_mat <- matrix(class_comps, nrow = nrow(final_df), ncol = nrow(final_df), byrow = TRUE)
+    dimnames(human_class_mat) <- list(final_df$ID, final_df$ID)
+    
+    return(human_class_mat)
+    
+  }))
+  
+  names(mat_list) <- social_scales
+  return(mat_list)
+
+}
+
+human_class_mats_by_observer <- pblapply(1:length(csvs), function(x){
+  df2binmat(X = csvs[[x]], class_prefix = "class")
+})
+
+names(human_class_mats_by_observer) <- paste("Observer", seq(1, length(human_class_mats_by_observer), 1), sep = "-")
+# str(human_class_mats_by_observer)
+
+saveRDS(human_class_mats_by_observer, file.path("/media/owner/MYIOPSITTA/R/Uruguay2017_MonkParakeet_CallAnalysis/Data/Site_Recordings", "human_class_mats_by_observer.RDS"))
+
+```
+
+These matrices look good. We moved on to subsetting SPCC and random forests acoustic similarity matrices for the given calls per social scale.
+```{r echo = TRUE, eval = TRUE}
+
+# read in repeatedly sampled individuals SPCC and random forests matrices
+# also the SPCC and random forests matrices for higher social scales
+i_path <- "/media/owner/MYIOPSITTA/R/Uruguay2017_MonkParakeet_CallAnalysis/Data/Focal_Individuals"
+h_path <- "/media/owner/MYIOPSITTA/R/Uruguay2017_MonkParakeet_CallAnalysis/Data/Site_Recordings"
+
+```
+
+```{r echo = TRUE, eval = FALSE}
+
+human_class_mats_by_observer <- readRDS(file.path(h_path, "human_class_mats_by_observer.RDS"))
+
+# repeatedly sampled individuals
+# needs to be filtered by calls used in the human classification, which were the same calls used for random forests validation
+xc_mat_i <- readRDS(file.path(i_path, "xc_mat_indiv_scale.RDS")) # SPCC
+# str(xc_mat_i)
+
+# this already contains only calls in the random forests validation data set (e.g. the individuals used in human classification)
+ # has no dimension names
+rf_mat_i <- readRDS(file.path(h_path, "proxm_ms.RDS")) # random forests
+# str(rf_mat_i)
+
+# higher social scales
+# these need to be filtered for pair, flock and site calls used in human classification
+xc_mat_h <- readRDS(file.path(h_path, "xc_mat_higher_social_scales.RDS")) # SPCC
+# str(xc_mat_h)
+
+# add dimension names to the rf_mat to facilitate filtering, these are the same as the xc_mat for higher social scales
+rf_mat_h <- readRDS(file.path(h_path, "proxm_site.RDS")) # random forests
+dimnames(rf_mat_h) <- dimnames(xc_mat_h)
+# str(rf_mat_h)
+
+```
+
+### Individual Scale
+
+Subset the SPCC and random forests matrices for repeatedly sampled individuals used in human classification.
+```{r echo = TRUE, eval = FALSE}
+
+sel_table <- sel_tables[[1]]
+# unique(sel_table$scale) # checking
+# dimnames(xc_mat_i)
+
+# make the selection table call IDs match the SPCC matrix dimension names
+call_IDs <- sel_table$sound.files
+call_IDs <- gsub("WAV_", "WAV-", call_IDs)
+
+# filter the SPCC matrix by the call_IDs in the selection table used for human classification
+xc_mat_i_sub <- xc_mat_i[grep(paste(paste("^", call_IDs, "$", sep = ""), collapse = "|"), dimnames(xc_mat_i)[[1]]), grep(paste(paste("^", call_IDs, "$", sep = ""), collapse = "|"), dimnames(xc_mat_i)[[2]])]
+# dimnames(xc_mat_i_sub) # checking
+
+# replace dimnames to be friendlier for plotting 
+dimnames(xc_mat_i_sub) <- list(sel_table$ID, sel_table$ID)
+dim(xc_mat_i_sub)
+
+# filter the random forests matrix by the call_IDs in the selection table used for human classification
+# first give the random forests matrix dimension names
+rf_dim_nms <- dimnames(xc_mat_i)[[1]][grep("RAW|ZW8|-BIRD3|-BIRD5", dimnames(xc_mat_i)[[1]])]
+dimnames(rf_mat_i) <- list(rf_dim_nms, rf_dim_nms)
+
+rf_mat_i_sub <- rf_mat_i[grep(paste(paste("^", call_IDs, "$", sep = ""), collapse = "|"), dimnames(rf_mat_i)[[1]]), grep(paste(paste("^", call_IDs, "$", sep = ""), collapse = "|"), dimnames(rf_mat_i)[[2]])]
+# dimnames(rf_mat_i_sub) # checking
+
+# replace dimnames to be friendlier for plotting 
+dimnames(rf_mat_i_sub) <- list(sel_table$ID, sel_table$ID)
+
+# make the binary matrix of group identity at this social scale
+group_IDs <- sapply(1:nrow(sel_table), function(x){
+  as.numeric(sel_table$ID[x] == sel_table$ID)
+})
+
+binmat_indiv_ID <- matrix(group_IDs, byrow = TRUE, nrow = nrow(sel_table), ncol = nrow(sel_table))
+dimnames(binmat_indiv_ID) <- list(sel_table$ID, sel_table$ID)
+# binmat_indiv_ID # checking
+
+```
+
+Read in the selection table and metadata for calls at higher social scales.
+```{r echo = TRUE, eval = TRUE}
+
+ccs <- read.csv(file.path(h_path, "higher_social_scales_calls_preprocessed_final.csv"), header = TRUE)
+
+```
+
+### Pair Scale
+
+Subset the SPCC and random forests matrices for pair calls used in human classification.
+```{r echo = TRUE, eval = FALSE}
+
+sel_table <- sel_tables[[2]]
+# unique(sel_table$scale) # checking
+
+# check out call IDs between the human classification selection table and the SPCC matrix
+# sel_table$sound.files
+# dimnames(xc_mat_h)[[1]]
+
+# make the selection table call IDs match the SPCC matrix dimension names
+call_IDs <- sel_table$sound.files
+call_IDs <- gsub("WAV_", "WAV-", call_IDs)
+
+# filter the SPCC matrix by the call_IDs in the selection table used for human classification
+xc_mat_h_pairs <- xc_mat_h[grep(paste(paste("^", call_IDs, "$", sep = ""), collapse = "|"), dimnames(xc_mat_h)[[1]]), grep(paste(paste("^", call_IDs, "$", sep = ""), collapse = "|"), dimnames(xc_mat_h)[[2]])]
+# dimnames(xc_mat_h_pairs) # checking
+
+# replace dimnames to be friendlier for plotting 
+dimnames(xc_mat_h_pairs) <- list(sel_table$ID, sel_table$ID)
+
+# repeat filtering for the random forests matrix
+rf_mat_h_pairs <- rf_mat_h[grep(paste(paste("^", call_IDs, "$", sep = ""), collapse = "|"), dimnames(rf_mat_h)[[1]]), grep(paste(paste("^", call_IDs, "$", sep = ""), collapse = "|"), dimnames(rf_mat_h)[[2]])]
+# dimnames(rf_mat_h_pairs) # checking
+
+# replace dimnames to be friendlier for plotting 
+dimnames(rf_mat_h_pairs) <- list(sel_table$ID, sel_table$ID)
+
+# make the binary matrix of group identity at this social scale
+group_IDs <- sapply(1:nrow(sel_table), function(x){
+  as.numeric(sel_table$ID[x] == sel_table$ID)
+})
+
+binmat_pair_ID <- matrix(group_IDs, byrow = TRUE, nrow = nrow(sel_table), ncol = nrow(sel_table))
+dimnames(binmat_pair_ID) <- list(sel_table$ID, sel_table$ID)
+# binmat_pair_ID # checking
+
+```
+
+### Flock Scale
+
+Subset the SPCC and random forests matrices for flock calls used in human classification.
+```{r echo = TRUE, eval = FALSE}
+
+sel_table <- sel_tables[[3]]
+# unique(sel_table$scale) # checking
+
+# make the selection table call IDs match the SPCC matrix dimension names
+call_IDs <- sel_table$sound.files
+call_IDs <- gsub("WAV_", "WAV-", call_IDs)
+
+# filter the SPCC matrix by the call_IDs in the selection table used for human classification
+xc_mat_h_flocks <- xc_mat_h[grep(paste(paste("^", call_IDs, "$", sep = ""), collapse = "|"), dimnames(xc_mat_h)[[1]]), grep(paste(paste("^", call_IDs, "$", sep = ""), collapse = "|"), dimnames(xc_mat_h)[[2]])]
+# dimnames(xc_mat_h_flocks) # checking
+
+# replace dimnames to be friendlier for plotting 
+dimnames(xc_mat_h_flocks) <- list(sel_table$ID, sel_table$ID)
+
+# repeat filtering for the random forests matrix
+rf_mat_h_flocks <- rf_mat_h[grep(paste(paste("^", call_IDs, "$", sep = ""), collapse = "|"), dimnames(rf_mat_h)[[1]]), grep(paste(paste("^", call_IDs, "$", sep = ""), collapse = "|"), dimnames(rf_mat_h)[[2]])]
+# dimnames(rf_mat_h_flocks) # checking
+
+# replace dimnames to be friendlier for plotting 
+dimnames(rf_mat_h_flocks) <- list(sel_table$ID, sel_table$ID)
+
+# make the binary matrix of group identity at this social scale
+group_IDs <- sapply(1:nrow(sel_table), function(x){
+  as.numeric(sel_table$ID[x] == sel_table$ID)
+})
+
+binmat_flock_ID <- matrix(group_IDs, byrow = TRUE, nrow = nrow(sel_table), ncol = nrow(sel_table))
+dimnames(binmat_flock_ID) <- list(sel_table$ID, sel_table$ID)
+# binmat_flock_ID # checking
+
+```
+
+### Site Scale
+
+Subset the SPCC and random forests matrices for site calls used in human classification. Also, make a binary matrix of group identity for these site-scale calls. 
+```{r echo = TRUE, eval = FALSE}
+
+sel_table <- sel_tables[[4]]
+# unique(sel_table$scale) # checking
+
+# make the selection table call IDs match the SPCC matrix dimension names
+call_IDs <- sel_table$sound.files
+call_IDs <- gsub("WAV_", "WAV-", call_IDs)
+
+# filter the SPCC matrix by the call_IDs in the selection table used for human classification
+xc_mat_h_sites <- xc_mat_h[grep(paste(paste("^", call_IDs, "$", sep = ""), collapse = "|"), dimnames(xc_mat_h)[[1]]), grep(paste(paste("^", call_IDs, "$", sep = ""), collapse = "|"), dimnames(xc_mat_h)[[2]])]
+# dimnames(xc_mat_h_sites) # checking
+
+# replace dimnames to be friendlier for plotting 
+dimnames(xc_mat_h_sites) <- list(sel_table$ID, sel_table$ID)
+
+# repeat filtering for the random forests matrix
+rf_mat_h_sites <- rf_mat_h[grep(paste(paste("^", call_IDs, "$", sep = ""), collapse = "|"), dimnames(rf_mat_h)[[1]]), grep(paste(paste("^", call_IDs, "$", sep = ""), collapse = "|"), dimnames(rf_mat_h)[[2]])]
+# dimnames(rf_mat_h_sites) # checking
+
+# replace dimnames to be friendlier for plotting 
+dimnames(rf_mat_h_sites) <- list(sel_table$ID, sel_table$ID)
+
+# make the binary matrix of group identity at this social scale
+group_IDs <- sapply(1:nrow(sel_table), function(x){
+  as.numeric(sel_table$ID[x] == sel_table$ID)
+})
+
+binmat_site_ID <- matrix(group_IDs, byrow = TRUE, nrow = nrow(sel_table), ncol = nrow(sel_table))
+dimnames(binmat_site_ID) <- list(sel_table$ID, sel_table$ID)
+# binmat_site_ID # checking
+
+```
+
+The subsetted SPCC and random forests matrices look good, as do the binary matrices of group identity across social scales. We used a model-based clustering approach to ask how well clustering algorithms classified calls based on similarity matrices per method.
+```{r echo = TRUE, eval = FALSE}
+
+# x <- 2
+human_mat_list <- invisible(pblapply(1:length(social_scales), function(x){
+  
+  ss <- social_scales[x]
+  
+  # extract human classification matrices across observers for this social scale
+  human_class_mats <- lapply(1:length(human_class_mats_by_observer), function(x){
+    human_class_mats_by_observer[[x]][[ss]]
+  })
+  
+  # add matrices for this scale together across observers
+  # yields a matrix in which each cell indicates how often calls were classified together across observers
+  human_class_mat <- Reduce('+', human_class_mats)
+  
+  # scale the matrix values between 0 and 1 to be as similar as possible to the SPCC and random forests matrices
+  human_class_mat <- apply(human_class_mat, MARGIN = 2, FUN = function(X) (X - min(X))/diff(range(X)))
+
+  return(human_class_mat)
+
+}))
+names(human_mat_list) <- social_scales
+
+SPCC_mat_list <- list(xc_mat_i_sub, xc_mat_h_pairs, xc_mat_h_flocks, xc_mat_h_sites)
+names(SPCC_mat_list) <- social_scales
+
+rf_mat_list <- list(rf_mat_i_sub, rf_mat_h_pairs, rf_mat_h_flocks, rf_mat_h_sites)
+names(rf_mat_list) <- social_scales
+
+asim_method <- c("Visual Inspection", "SPCC", "Random Forests")
+asim_mat_list <- list(human_mat_list, SPCC_mat_list, rf_mat_list)
+names(asim_mat_list) <- asim_method
+
+
+```
+
+## t-SNE and Model-based Clustering
+
+Iterate over similarity methods and social scales to: 1) perform t-SNE per similarity method, 2) perform model-based clustering per simiarity method, 3) make a data frame with the new embeddings as well as metadata for plotting, including the model-based clustering classes.
+```{r echo = TRUE, eval = FALSE}
+
+df_list <- invisible(pblapply(1:length(asim_method), function(i){
+  
+  asim_mats <- asim_mat_list[[asim_method[i]]]
+  
+  # iterate over social scales
+  df_list <- lapply(1:length(social_scales), function(x){
+    
+    ss <- social_scales[x]
+    
+    # convert the similarity matrix to a distance matrix
+    # will be used for t-SNE and model-based clustering
+    dist_mat <- stats::as.dist(1 - asim_mats[[x]], diag = TRUE, upper = TRUE)
+    
+    # perform t-SNE
+
+    # the optimized perplexity for focal individual feature extraction was too large for this t-SNE visualization, so we used the maximum perplexity possible given the dimensions of the distance matrix
+    plx <- (dim(asim_mats[[x]])[1]/3) - 1
+
+    # visualize with t-SNE in 2 dimensions
+    tmp <- list()
+    tmp <- lapply(1:10, function(n){
+      Rtsne::Rtsne(dist_mat, dims = 2, pca = FALSE, max_iter = 5000, perplexity = plx, is_distance = TRUE, theta = 0.0)
+    })
+    # str(tmp)
+
+    KL <- sapply(1:length(tmp), function(x){
+      tmp[[x]]$itercosts[100]
+    }, simplify = TRUE)
+
+    # overwrite tmp with the solution that minimized KL
+    tsne <- tmp[[which(KL == min(KL))]]
+  
+    # perform model-based clustering while limiting the possible number of clusters to the true number of groups in each call data set
+    set.seed(seed)
+    mBIC_res <- mclust::Mclust(data = dist_mat, G = 1:4)
+  
+    # make a data frame with output
+    df <- data.frame(asim_method = asim_method[i], social_scale = ss, X = tsne$Y[, 1], Y = tsne$Y[, 2], true_group = as.numeric(factor(dimnames(asim_mats[[x]])[[1]])), cluster = mBIC_res$classification)
+    
+    return(df)
+    
+  })
+  
+  return(rbindlist(df_list))
+  
+}))
+
+clustering_df <- rbindlist(df_list)
+clustering_df$true_group <- factor(clustering_df$true_group)
+clustering_df$cluster <- factor(clustering_df$cluster)
+str(clustering_df)
+
+saveRDS(clustering_df, file.path(out_path, "clustering_df.RDS"))
+
+```
+
+Here, find the number of calls misclassified per true group across social scales and similarity methods. The resulting data frame will be used for labels in the faceted plot below.
+```{r echo = TRUE, eval = TRUE}
+
+clustering_df <- readRDS(file.path(out_path, "clustering_df.RDS"))
+
+# make a new column of numeric group ID
+clustering_df$true_group_num <- as.numeric(clustering_df$true_group)
+
+clustering_df$asim_method <- as.character(clustering_df$asim_method)
+
+clustering_df$asim_method <- factor(clustering_df$asim_method, levels = c("Visual Inspection", "SPCC", "Random Forests"))
+
+asim_method <- c("Visual Inspection", "SPCC", "Random Forests")
+clusters <- 4 # each social scale has 4 clusters
+
+# number of calls per group per social scale
+num_spectros <- c(4, 2, 3, 4)
+
+# iterate over similarity methods
+df_list <- invisible(pblapply(1:length(asim_method), function(i){
+  
+  # iterate over social scales
+  df_list <- lapply(1:length(social_scales), function(x){
+    
+    am <- asim_method[i]
+    ss <- social_scales[x]
+    
+    # subset data and count observations per cluster identified by model-based clustering
+    clust_df <- clustering_df %>% 
+      filter(as.character(asim_method) == am) %>% 
+      filter(social_scale == ss) %>%
+      droplevels() 
+    
+    # setting parameters for placing text labels in faceted plot below
+    if(am == "Visual Inspection" & ss == "Individual"){
+       X <- -Inf
+       Y <- -Inf
+    } else if(am == "SPCC" & ss == "Pair"){
+       X <- Inf
+       Y <- -Inf 
+    } else if(am == "Random Forests" & ss == "Pair"){
+       X <- Inf
+       Y <- -Inf 
+    } else if(am == "Visual Inspection" & ss == "Flock"){
+       X <- -Inf
+       Y <- -Inf
+    } else {
+      X <- -Inf
+      Y <- -Inf
+    }
+    
+    # iterate over clusters to find the number of incorrectly assigned calls per cluster
+    incorr <- unlist(lapply(1:clusters, function(y){
+      
+      tmp <- clust_df %>% 
+        filter(cluster == y) %>% 
+        droplevels()
+      
+      if(nrow(tmp) < num_spectros[x] & length(unique(tmp$true_group)) == 1){
+        
+        incorr <- num_spectros[x] - nrow(tmp)
+        
+      } else if(nrow(tmp) > num_spectros[x] & length(unique(tmp$true_group)) > 1){
+        
+        incorr <- nrow(tmp) - num_spectros[x]
+        
+      } else if(nrow(tmp) <= num_spectros[x] & length(unique(tmp$true_group)) > 1){
+        
+        incorr <- abs(length(unique(tmp$true_group)) - length(unique(tmp$cluster)))
+        
+        # correctly assigned
+      } else if(nrow(tmp) == num_spectros[x] & length(unique(tmp$true_group)) == 1){
+        
+        incorr <- 0
+        
+        # if no calls were assigned to this cluster, these incorrect assignments will be picked up when evaluating other clusters
+      } else if(nrow(tmp) == 0){
+        
+        incorr <- 0
+        
+      }
+      
+      return(incorr)
+      
+    }))
+    
+    incorr <- (sum(unlist(incorr))/nrow(clust_df)*100)
+    percent_corr <- paste(round(100 - incorr, digits = 2), "%", sep = "")
+    
+    df <- data.frame(asim_method = am, social_scale = ss, percent_corr = percent_corr, X = X, Y = Y)
+    return(df)
+    
+  })
+  
+  return(rbindlist(df_list))
+  
+}))
+
+corr_df <- rbindlist(df_list)
+corr_df
+
+```
+
+### Supplementary Figure 6
+
+Make a faceted plot by smilarity method and social scales of the true group identity versus model-based clustering results. This is Supplementary Figure 6 in supplementary materials. 
+```{r echo = TRUE, eval = TRUE, dpi = 200, fig.width = 8, fig.height = 11}
+
+# initialize aesthetics  
+n <- 12
+cols <- c(topo.colors(n, alpha = 1)[2], terrain.colors(n, alpha = 1)[2], heat.colors(n, alpha = 1)[1], heat.colors(n, alpha = 1)[5])
+shps <- c(0, 21, 24, 6)
+
+# find the min and max per level of grouping variables
+x_maxes <- tapply(clustering_df$X, list(clustering_df$social_scale, clustering_df$asim_method), max, simplify = TRUE)
+
+x_mins <- tapply(clustering_df$X, list(clustering_df$social_scale, clustering_df$asim_method), min)
+
+y_maxes <- tapply(clustering_df$Y, list(clustering_df$social_scale, clustering_df$asim_method), max, simplify = TRUE)
+
+y_mins <- tapply(clustering_df$Y, list(clustering_df$social_scale, clustering_df$asim_method), min)
+
+# find a good x and y buffer per combo of factor levels
+x_buf <- tapply(clustering_df$X, list(clustering_df$social_scale, clustering_df$asim_method), function(x){ return(max(x)/3) }, simplify = TRUE)
+x_buf
+
+y_buf <- tapply(clustering_df$Y, list(clustering_df$social_scale, clustering_df$asim_method), function(x){ return(max(x)/3) }, simplify = TRUE)
+y_buf
+
+blank_data <- data.frame(asim_method = rep(corr_df$asim_method, 2), social_scale = rep(corr_df$social_scale, 2), x = c(as.vector(x_mins) - as.vector(x_buf), as.vector(x_maxes) + as.vector(x_buf)), y = c(as.vector(y_mins) - as.vector(y_buf), as.vector(y_maxes) + as.vector(y_buf)))
+
+# make graphic
+gg <- ggplot(data = clustering_df, aes(x = X, y = Y)) + 
+  
+  # yields nice strip text on top and right but cannot yield truly free axes
+  # facet_grid(rows = vars(social_scale), cols = vars(asim_method), scales = "free", shrink = TRUE, space = "fixed") +
+
+  facet_wrap(vars(social_scale, asim_method), ncol = length(unique(clustering_df$asim_method)), scales = "free") +
+  
+  # labeller = label_values
+
+  geom_point(aes(shape = true_group), fill = gray.colors(n, alpha = 1)[2], size = 3.5) + 
+  
+  # overlay circular points for clusters
+  geom_point(aes(color = cluster), shape = 19, size = 2) +
+  
+  scale_shape_manual(values = shps) + 
+  
+  guides(shape = guide_legend(title = "True Group"), color = guide_legend(title = "Cluster")) +
+  
+  xlab("t-SNE Dimension 1") + ylab("t-SNE Dimension 2") + 
+  
+  geom_blank(data = blank_data, aes(x = x, y = y)) +
+  
+  expand_limits(y = 0) + scale_y_continuous(expand = c(0, 0)) +
+  
+  geom_text(data = corr_df, aes(label = percent_corr, vjust = -0.45), hjust = 0.1*c(-1, -1, -1, -1, -1, 11, -1, -1, -1, 11, -1, -1), size = 4, fontface = "bold") +
+  
+  # scale_color_manual(colors = cols) +
+
+  theme(panel.background = element_rect(fill = "white", color = "black"), plot.background = element_rect(fill = "white"), panel.grid.major = element_line(size = 1, colour = "white"), panel.grid.minor = element_line(size = 0.75, colour = "white"), axis.line = element_line(size = 0.5, colour = "black"), axis.title = element_text(size = 14), axis.text = element_text(size = 10), strip.text = element_text(size = 11, face = "bold"), legend.position = "top", legend.title = element_text(size = 12), legend.text = element_text(size = 12)) +
+  
+    ggtitle("")
+
+gg
+
+# ggsave(file.path(out_path, "SupplementaryFigure6_CompareAcousticMethods.tiff"), units = "in", height = 8.5, width = 6.9, dpi = 325)
+
+# extract cluster colors from this plot for future reference
+# p <- ggplot_build(gg)
+# unique(p$data[[2]]["colour"])
+
+```
+
+# Adressing Differences in Social Context
+
+Here, we asked whether there was a difference in acoustic convergence when individuals sampled for higher social scales were recorded while flying alone or in a social context. We compared the SPCC distances between these calls in a permutation test. We performed permutations for sites at which we recorded lone individuals. 
+
+## Permutation Tests and Effect Sizes
+
+Prepare for the permutation test by identifying individuals in lone and social contexts at higher social scales. 
+```{r echo = TRUE, eval = FALSE}
+
+# read in the higher social scale SPCC matrix
+xc_mat_h <- readRDS(file.path(h_path, "xc_mat_higher_social_scales.RDS")) 
+# str(xc_mat_h)
+
+# convert to a distance matrix
+xc_mat_h <- 1 - xc_mat_h 
+
+# find calls of individuals that were sampled flying alone for the site social scale
+table(ccs$Group_size)
+
+site_indivs <- droplevels(ccs[ccs$Group_size == 1 & !is.na(ccs$Group_size), ])
+# str(site_indivs)
+
+# at which sites did we record these birds?
+sites <- names(table(site_indivs$General_site))
+sites
+
+# add a call_ID column
+site_indivs$call_ID <- paste(as.character(site_indivs$sound.files), site_indivs$selec, sep = "-")
+
+# find calls of individuals flying in pairs or flocks of 3-4 birds
+# also filter by the sites in which the lone individuals were recorded
+site_social <- droplevels(ccs[ccs$Group_size > 1 & ccs$Group_size < 5 & !is.na(ccs$Group_size) & grepl(paste(paste("^", sites, "$", sep = ""), collapse = "|"), ccs$General_site), ])
+# str(site_social)
+
+table(site_social$General_site)
+
+# add a call_ID column
+site_social$call_ID <- paste(as.character(site_social$sound.files), site_social$selec, sep = "-")
+
+# retain only sites that were sampled for both the lone individuals and the social individuals
+sites <- sites[which(sites %in% site_social$General_site)]
+
+# mean(table(droplevels(ccs$General_site[grep(paste(sites, collapse = "|"), ccs$General_site)])))
+
+```
+
+Iterate over the sites above and extract the distances to all other calls at that site for the lone calls and the social calls, then perform the permuatation test per site.
+```{r echo = TRUE, eval = FALSE}
+
+iteratns <- 1000
+
+perm_test_list <- invisible(pblapply(1:length(sites), function(i){
+
+  # first filter the SPCC matrix by the calls for the given site
+  xc_tmp <- xc_mat_h[grep(paste(paste("_", sites[i], "_", sep = ""), collapse = "|"), dimnames(xc_mat_h)[[1]]), grep(paste(paste("_", sites[i], "_", sep = ""), collapse = "|"), dimnames(xc_mat_h)[[2]])]
+  
+  # extract distances to all other calls for the lone individuals
+  xc_tmp_lone <- xc_tmp[, grep(paste(paste("^", site_indivs$call_ID[grep(sites[i], site_indivs$call_ID)], "$", sep = ""), collapse = "|"), dimnames(xc_tmp)[[2]])]
+  
+  # make sure to exclude calls compared to themselves
+  xc_tmp_lone <- xc_tmp_lone[xc_tmp_lone != 0] 
+   
+  # extract distances to all other calls for the social individuals
+  xc_tmp_social <- xc_tmp[, grep(paste(paste("^", site_social$call_ID[grep(sites[i], site_social$call_ID)], "$", sep = ""), collapse = "|"), dimnames(xc_tmp)[[2]])]
+   
+  # make sure to exclude calls compared to themselves
+  xc_tmp_social <- xc_tmp_social[xc_tmp_social != 0]  
+  
+  # initialize the observed differences between the distance for lone or social calls
+  obs_diff <- abs(mean(xc_tmp_lone) - mean(xc_tmp_social))
+  
+  # initialize the length of the lone call distances
+  # this will serve as the sample size for the permuted lone and social distance per iteration
+  nl <- length(xc_tmp_lone)
+  
+  # combine the SPCC values for lone and social individuals
+  all_xc_vals <- c(xc_tmp_lone, xc_tmp_social)
+  
+  df_list <- lapply(1:iteratns, function(x){
+    
+    # randomly sample distances without replacement to represent the lone distances
+  rsamp_l <- sample(all_xc_vals, size = nl, replace = FALSE)
+  
+  # randomly sample distances without replacement to represent the social distances
+  rsamp_s <- sample(all_xc_vals, size = nl, replace = FALSE)
+  
+  # save the mean of each permuted group
+  df <- data.frame(site = sites[i], iteratn = x, mean_bw = abs(mean(rsamp_l) - mean(rsamp_s)))
+  
+  return(df)
+    
+  })
+
+  df <- rbindlist(df_list)
+  
+  # iterate over sites to calculate p-values
+  p_higher <- length(which(df$mean_bw > obs_diff))/iteratns
+  p_lower <- length(which(df$mean_bw < obs_diff))/iteratns
+  
+  # calculate the effect size of the observed difference
+  effect <- cohen.d(d = xc_tmp_lone, f = xc_tmp_social, pooled = TRUE, hedges.correction = TRUE, conf.level = 0.95)
+  # str(effect)
+  
+  final_df <- data.frame(site = sites[i], perm_sample_size = nl, num_higher = length(which(df$mean_bw > obs_diff)), num_lower = length(which(df$mean_bw < obs_diff)), p_higher = p_higher, p_lower = p_lower, effect_size = round(effect$estimate, digits = 2), effect_size_95CI_lower = round(effect$conf.int[["lower"]], digits = 2), effect_size_95CI_upper = round(effect$conf.int[["upper"]], digits = 2))
+  
+  return(final_df)
+  
+  
+  
+}))
+
+perm_test_df <- rbindlist(perm_test_list)
+str(perm_test_df)
+
+saveRDS(perm_test_df, file.path(out_path, "perm_test_df_1.RDS"))
+
+```
+
+I'm interested in whether or not the repeatedly sampled individuals at site 1145 show similar observed and expected differences between lone and social contexts. Group size was not recorded for all 1145 calls, but there 5 calls recorded from pairs flying together.
+
+This permutation test will be somewhat different, because here, the number of repeatedly sampled calls at the individual scale outweighs those of the site scale recorded in a confirmed social context. 
+
+Prepare for the permutation test with calls from site 1145, including repeatedly sampled individuals.
+```{r echo = TRUE, eval = TRUE}
+
+# read in the matrix of SPCC similarity for repeatedly sampled individuals
+xc_mat_i <- readRDS(file.path(i_path, "xc_mat_indiv_scale.RDS")) 
+# str(xc_mat_i)
+
+# convert to a distance matrix
+xc_mat_i <- 1 - xc_mat_i
+
+# filter the individual scale by site 1145
+xc_mat_i_1145 <- xc_mat_i[grep("_1145-", dimnames(xc_mat_i)[[1]]), grep("_1145", dimnames(xc_mat_i)[[2]])]
+# str(xc_mat_i_1145)
+
+# replace dimnames of each matrix with individual IDs
+rsindiv_IDs <- sapply(1:length(dimnames(xc_mat_i_1145)[[1]]), function(x){
+  
+  if(grepl("UNM", dimnames(xc_mat_i_1145)[[1]][x])){
+    strsplit(strsplit(dimnames(xc_mat_i_1145)[[1]][x], split = "_")[[1]][5], split = "-")[[1]][3]
+  } else {
+    strsplit(strsplit(dimnames(xc_mat_i_1145)[[1]][x], split = "_")[[1]][5], split = "-")[[1]][2]
+  }
+  
+})
+
+# rsindiv_IDs
+
+dimnames(xc_mat_i_1145) <- list(rsindiv_IDs, rsindiv_IDs)
+# str(xc_mat_i_1145)
+
+# for every call for the repeatedly sampled individuals, find the distance to all other calls for all other individuals except that same individual
+indivs <- unique(rsindiv_IDs)
+# indivs
+
+df_list <- invisible(pblapply(1:length(indivs), function(x){
+  
+   # exclude calls from the same individual
+  tmp <- xc_mat_i_1145[grep(indivs[x], dimnames(xc_mat_i_1145)[[1]]), -grep(indivs[x], dimnames(xc_mat_i_1145)[[2]])]
+  
+  # iterate over calls and return distances to all other calls of all other individuals while excluding calls from the same individual
+  df_list <- lapply(1:length(dimnames(tmp)[[1]]), function(i){
+    vals <- tmp[i, ]
+    df <- data.frame(ID = indivs[x], dists = vals)
+    return(df)
+  })
+
+  return(rbindlist(df_list))
+
+}))
+
+indivs_df <- rbindlist(df_list)
+# str(indivs_df)
+
+# read in the SPCC matrix for higher social scales
+xc_mat_h <- readRDS(file.path(h_path, "xc_mat_higher_social_scales.RDS")) 
+# str(xc_mat_h)
+
+# convert to a distance matrix
+xc_mat_h <- 1 - xc_mat_h
+
+# for the higher social scale, filter by the calls at 1145 recorded in a confirmed social context
+social_1145 <- droplevels(ccs[grepl("1145", ccs$General_site) & ccs$Group_size > 1 & !is.na(ccs$Group_size), ])
+
+social_1145$call_ID <- paste(social_1145$sound.files, social_1145$selec, sep = "-")
+
+# obtain the SPCC distances from the social context calls at 1145 to all other calls at 1145
+xc_mat_h_1145 <- xc_mat_h[grep(paste("_", "1145", "-", sep = ""), dimnames(xc_mat_h)[[1]]), grep(paste(paste("^", social_1145$call_ID, "$", sep = ""), collapse = "|"), dimnames(xc_mat_h)[[2]])]
+# str(xc_mat_h_1145)
+
+# make sure to exclude any calls compared to themselves
+xc_social_1145 <- xc_mat_h_1145[xc_mat_h_1145 != 0]
+# xc_social_1145
+
+```
+
+Perform the permutation test by permuting the SPCC distances among calls in the repeatedly sampled individual and social (1145 birds recorded flying in pairs) contexts.
+```{r echo = TRUE, eval = FALSE}
+
+# initialize the observed differences between the distance for lone or social calls
+obs_diff <- abs(mean(indivs_df$dists) - mean(xc_social_1145))
+obs_diff
+  
+# initialize the length of the social call distances
+# this will serve aas the sample size for the permuted individual and social distance per iteration
+ns <- length(xc_social_1145)
+
+# combine the SPCC values for lone and social individuals
+all_xc_vals <- c(indivs_df$dists, xc_social_1145)
+
+iteratns <- 1000
+  
+perm_test_list2 <- invisible(pblapply(1:iteratns, function(x){
+    
+  # randomly sample distances without replacement to represent the lone distances
+  rsamp_l <- sample(all_xc_vals, size = ns, replace = FALSE)
+  
+  # randomly sample distances without replacement to represent the social distances
+  rsamp_s <- sample(all_xc_vals, size = ns, replace = FALSE)
+  
+  # save the mean of each permuted group
+  df <- data.frame(site = "1145", iteratn = x, mean_bw = abs(mean(rsamp_l) - mean(rsamp_s)))
+  
+  return(df)
+    
+}))
+  
+perm_test_df2 <- rbindlist(perm_test_list2)
+
+# calculate p-values for whether or not the permuted difference was significantly greater or less than the observed difference
+p_higher <- length(which(perm_test_df2$mean_bw > obs_diff))/iteratns
+p_lower <- length(which(perm_test_df2$mean_bw < obs_diff))/iteratns
+  
+# calculate the effect size of the observed difference
+effect <- cohen.d(d = indivs_df$dists, f = xc_social_1145, pooled = TRUE, hedges.correction = TRUE, conf.level = 0.95)
+# str(effect)
+  
+final_df <- data.frame(site = "1145", perm_sample_size = ns, num_higher = length(which(perm_test_df2$mean_bw > obs_diff)), num_lower = length(which(perm_test_df2$mean_bw < obs_diff)), p_higher = p_higher, p_lower = p_lower, effect_size = round(effect$estimate, digits = 2), effect_size_95CI_lower = round(effect$conf.int[["lower"]], digits = 2), effect_size_95CI_upper = round(effect$conf.int[["upper"]], digits = 2))
+
+saveRDS(final_df, file.path(out_path, "perm_test_df_2.RDS"))
+
+```
+
+## Permutation Test Results
+
+Combine results from permutation tests and calculate p-values to determine whether or not the permuted difference was significantly greater or less than the observed difference between social contexts per site.  
+```{r echo = TRUE, eval = FALSE}
+
+perm1 <- readRDS(file.path(out_path, "perm_test_df_1.RDS"))
+str(perm1)
+
+perm2 <- readRDS(file.path(out_path, "perm_test_df_2.RDS"))
+str(perm2)
+
+all_perms <- rbind(perm1, perm2)
+kable(all_perms)
+
+saveRDS(all_perms, file.path(out_path, "overall_perm_test_df.RDS"))
+
+```
+
+We used a Bonferroni correction for multiple comparisons. We evaluated significance of the permutation test p-values using the adjusted alpha reported below. 
+```{r echo = TRUE, eval = TRUE}
+
+all_perms <- readRDS(file.path(out_path, "overall_perm_test_df.RDS"))
+
+# the total number of comparisons for this permutation test, which includes the total number of sites used by the p-value comparisons (higher and lower than expected):
+nrow(all_perms)*2
+
+# the adjusted alpha by a Bonferroni correction:
+alpha <- 0.05
+
+adj_alpha <- round(alpha/(nrow(all_perms)*2), digits = 4)
+adj_alpha
+
+```
+
+### Supplementary Table 4
+
+This is Supplementary Table 4 in supplementary materials. 
+```{r echo = TRUE, eval = TRUE}
+
+tbl <- all_perms
+
+names(tbl) <- c("Site", "Sample_Size", "Higher", "Lower", "p-higher", "p-lower", "Effect_Size", "95_CI_L", "95_CI_U")
+
+kable(tbl, digits = 3, align = "c")
+
+```
+
+## Effect Sizes for Acoustic Convergence at the Individual Scale
+
+We also calculated the effect sizes for acoustic convergence within versus among repeatedly sampled individuals (e.g. the effect size of acoustic convergence at the individual scale, or individual signatures). This served as a baseline for assessing the strength of the effect of social context (lone versus social) on acoustic convergence (see above). 
+```{r echo = TRUE, eval = TRUE}
+
+indiv_es <- invisible(pblapply(1:length(indivs), function(x){
+  
+  # SPCC distances within the given individual and all others
+  tmp_in <- xc_mat_i_1145[grep(indivs[x], dimnames(xc_mat_i_1145)[[1]]), grep(indivs[x], dimnames(xc_mat_i_1145)[[2]])]
+  tmp_in <- tmp_in[lower.tri(tmp_in)]
+  
+   # SPCC distances between the given individual and all others
+  tmp_bw <- as.vector(xc_mat_i_1145[grep(indivs[x], dimnames(xc_mat_i_1145)[[1]]), -grep(indivs[x], dimnames(xc_mat_i_1145)[[2]])])
+
+  # calculate the effect size of the observed difference
+  effect <- cohen.d(d = tmp_bw, f = tmp_in, pooled = TRUE, hedges.correction = TRUE, conf.level = 0.95)
+  effect
+  
+  return(data.frame(indiv = indivs[x], effect_size = effect$estimate, es_95CI_lower = effect$conf.int[["lower"]], es_95CI_upper = effect$conf.int[["upper"]]))
+  
+}))
+
+indiv_es <- rbindlist(indiv_es)
+
+```
+
+### Supplementary Table 5
+
+This is Supplementary Table 5 in supplementary materials.
+```{r echo = TRUE, eval = TRUE}
+
+tbl <- indiv_es
+
+names(tbl) <- c("Repeatedly Sampled Individual", "Effect Size", "95_CI_L", "95_CI_U")
+
+kable(tbl, digits = 2, align = "c")
+
+```
+
+What was the mean and standard deviation of the effect sizes across repeatedly sampled individuals?
+```{r echo = TRUE, eval = TRUE}
+
+mean(indiv_es$effect_size)
+sd(indiv_es$effect_size)
+
+```
+
+Mean and standard deviation of the effect sizes in observed differences between social context over sites? There were no significant p-values for lower permuted acoustic convergence between the lone and social contexts compared to the observed difference. 
+```{r echo = TRUE, eval = TRUE}
+
+mean(abs(all_perms$effect_size[all_perms$p_higher < adj_alpha]))
+sd(abs(all_perms$effect_size[all_perms$p_higher < adj_alpha]))
+
+```
+
+# Acoustic Similarity Over Time
+
+We recorded repeated calls from individuals over narrow recording windows. Here we report how narrow these recording windows were per repeatedly sampled individual, and whether acoustic similarity changed signficantly over these sampling windows per individual.
+
+Read in the selection table for repeatedly sampled individuals.
+```{r echo = TRUE, eval = TRUE}
+
+ccs_fi <- read.csv(file.path(i_path, "indiv_scale_calls_preprocessed.csv"), header = TRUE)
+# str(ccs_fi)
+
+```
+
+How many recordings per repeatedly sampled individual?
+```{r echo = TRUE, eval = TRUE}
+
+tapply(ccs_fi$sound.files, ccs_fi$indiv, function(X){
+  length(unique(X))
+})
+
+```
+
+Merge the selection table with metadata from whole recordings.
+```{r echo = TRUE, eval = TRUE}
+
+meta <- read.csv(file.path(h_path, "ParakeetRecordings_MASTER_03_14_18_GSV.csv"), header = TRUE)
+str(meta)
+
+ccs_fi2 <- ccs_fi %>%
+  left_join(
+    meta %>%
+      dplyr::select(FocalIndividual_Recording_File_Name, Time)
+    , by = c("sound.files" = "FocalIndividual_Recording_File_Name")
+  ) %>%
+  droplevels()
+# str(ccs_fi2)
+
+```
+
+How many recordings have time of day recorded per individual?
+```{r echo = TRUE, eval = TRUE}
+
+tmp <- ccs_fi2 %>%
+  filter(Time != "")
+
+tapply(tmp$sound.files, tmp$indiv, function(X){
+  length(unique(X))
+})
+
+```
+
+How long are each of these recordings (in minutes) per individual?
+```{r echo = TRUE, eval = TRUE}
+
+wavs <- tmp %>%
+  dplyr::select(sound.files) %>%
+  distinct() %>%
+  pull()
+
+dur_df <- rbindlist(lapply(1:length(wavs), function(x){
+  wav_dur(wavs[x], path = i_path)
+}))
+
+dur_df %>%
+  mutate(
+    duration = round(duration/60, digits = 2)
+  )
+
+```
+
+We recorded Unmarked Bird 1 over 8.50 minutes, Unmarked Bird 5 over 3.40 minutes and marked bird AAT over 5.74 minutes. All other repeatedly sampled individuals were recorded over a single day, and typically over a 2 hour time frame (CHECK FIELD NOTEBOOKS).
+
+Although we did not have times for every single recording, we could still perform an analysis to ask whether acoustic similarity changed over these recording periods. We had selected contact calls sequentially within and across recordings, so calls could be assigned integer values in consecutive order to represent sampling time. Marked bird AAT was recorded by 2 recordists, and we confirmed the order of recordings by listening to original .wav files (calls selected in 2017_07_29_1145-02_INDIV-AAT_1224.WAV came first). 
+```{r echo = TRUE, eval = TRUE}
+
+ccs_fi2 <- ccs_fi %>%
+  # make sure the levels of the individual ID column line up with the order in data frame
+  mutate(
+    indiv = factor(indiv, levels = unique(ccs_fi$indiv))
+  ) %>%
+  mutate(
+    call_order = unlist(tapply(sound.files, indiv, function(X){
+      seq(1, length(X), 1)
+    })))
+
+# looks good
+# View(ccs_fi2)
+
+```
+
+Perform Mantel tests of acoustic and sequence distance per repeatedly sampled individual.
+```{r echo = TRUE, eval = FALSE}
+
+# make a vector of unique individual IDs
+indivs <- as.character(unique(ccs_fi2$indiv))
+indivs
+
+# read in the matrix of SPCC similarity for repeatedly sampled individuals
+xc_mat_i <- readRDS(file.path(i_path, "xc_mat_indiv_scale.RDS")) 
+# str(xc_mat_i)
+
+# replace dimnames of each matrix with individual IDs
+rsindiv_IDs <- gsub("BIRD", "UM", sapply(1:length(dimnames(xc_mat_i)[[1]]), function(x){
+  if(grepl("UNM", dimnames(xc_mat_i)[[1]][x])){
+    strsplit(strsplit(dimnames(xc_mat_i)[[1]][x], split = "_")[[1]][5], split = "-")[[1]][3]
+  } else {
+    strsplit(strsplit(dimnames(xc_mat_i)[[1]][x], split = "_")[[1]][5], split = "-")[[1]][2]
+  }
+}))
+
+dimnames(xc_mat_i) <- list(rsindiv_IDs, rsindiv_IDs)
+# str(xc_mat_i)
+
+# convert to a distance matrix
+xc_mat_i <- 1 - xc_mat_i
+# str(xc_mat_i)
+
+# set permutations and cores for Mantel tests
+perms <- 9999
+cores <- parallel::detectCores() - 2
+
+# i <- 1 # testing
+seq_simil <- rbindlist(invisible(pblapply(1:length(indivs), function(i){
+  
+  # make a matrix of sequence distance per individual
+  tmp <- ccs_fi2 %>%
+    filter(indiv == indivs[i]) %>%
+    pull(call_order)
+  
+  seq_dist_mat <- stats::dist(tmp, diag = TRUE, upper = TRUE)
+  
+  # subset the SPCC distance matrix by the given individual
+  pat <- grep(paste("^", indivs[i], "$", sep = ""), dimnames(xc_mat_i)[[1]])
+  tmp_xc_mat <- xc_mat_i[pat, pat]
+  
+  # perform a Mantel test
+  mntl_res <- vegan::mantel(xdis = seq_dist_mat, ydis = tmp_xc_mat, method = "pearson", permutations = perms, parallel = cores)
+  
+  return(data.frame(indiv = indivs[i], num_calls = length(tmp), mantel_r = round(mntl_res$statistic, digits = 2), mantel_p = round(mntl_res$signif, digits = 4), permutations = mntl_res$permutations))
+  
+})))
+
+saveRDS(seq_simil, file.path(i_path, "Mantel_test_temporal_sequences.RDS"))
+
+```
+
+Print Mantel test results.
+```{r echo = TRUE, eval = TRUE}
+
+seq_simil <- readRDS(file.path(i_path, "Mantel_test_temporal_sequences.RDS"))
+seq_simil 
+
+```
+
+Adjust alpha of 0.05 using a Bonferroni correction. 
+```{r echo = TRUE, eval = TRUE}
+
+# the adjusted alpha by a Bonferroni correction:
+alpha <- 0.05
+
+adj_alpha <- round(alpha/nrow(seq_simil), digits = 4)
+adj_alpha
+
+```
+
+There was no significant relationship between acoustic distance and temporal sequence distance of calls recorded per repeated individual. All p-values were greater than the adjusted alpha (see above).
+
+We also ran this analysis for the unmarked individuals for which calls were contained in a single recording. Here, we used the start and end times of calls within recordings to calculate exact temporal distance among calls in a sequence.
+```{r, echo = TRUE, eval = FALSE}
+
+tapply(ccs_fi$sound.files, ccs_fi$indiv, function(X){
+  length(unique(X))
+})
+
+indivs <- c("UM2", "UM3", "UM4", "UM5")
+
+# i <- 1
+# x <- 23
+seq_simil <- rbindlist(invisible(pblapply(1:length(indivs), function(i){
+  
+  # for each call for the given individual, find the distance to all other calls in the same recording
+    tmp <- ccs_fi %>%
+    filter(indiv == indivs[i]) 
+    # str(tmp)
+    
+    # loop over each call, and make two subsets:
+    # calls that are before it and after it
+    # then calculate the temporal distance based on call placement
+    dists <- unlist(lapply(1:nrow(tmp), function(x){
+      
+      b4 <- c(x, which(tmp$start < tmp$start[x]))
+      
+      before <- b4[order(b4)]
+      after <- which(tmp$start > tmp$start[x])
+      
+      if(length(before) > 0){
+        dists_b <- tmp$start[x] - tmp[before, "start"]
+      }
+      
+      if(length(after) > 0){
+        dists_a <- tmp[after, "start"] - tmp$start[x]
+      } 
+      
+      if(length(before) > 0 & length(after) > 0){
+        return(c(dists_b, dists_a))
+      } else if(length(before) == 0){
+        return(c(dists_a))
+      } else if(length(after) == 0){
+        return(c(dists_b))
+      }
+      
+    }))
+  
+  # turn this vector into a symmetric matrix of temporal distance per individual
+  mat <- matrix(dists, byrow = TRUE, nrow = nrow(tmp), ncol = nrow(tmp))
+  # mat[1:10, 1:10] # checking, looks good
+  
+  # convert to a distance object
+  seq_dist_mat <- stats::as.dist(mat, diag = TRUE, upper = TRUE)
+  
+  # subset the SPCC distance matrix by the given individual
+  pat <- grep(paste("^", indivs[i], "$", sep = ""), dimnames(xc_mat_i)[[1]])
+  tmp_xc_mat <- xc_mat_i[pat, pat]
+  
+  # perform a Mantel test
+  mntl_res <- vegan::mantel(xdis = seq_dist_mat, ydis = tmp_xc_mat, method = "pearson", permutations = perms, parallel = cores)
+  
+  return(data.frame(indiv = indivs[i], num_calls = nrow(tmp), mantel_r = round(mntl_res$statistic, digits = 2), mantel_p = round(mntl_res$signif, digits = 4), permutations = mntl_res$permutations))
+  
+})))
+
+saveRDS(seq_simil, file.path(i_path, "Mantel_test_temporal_sequences_unmarked.RDS"))
+
+```
+
+Print Mantel test results.
+```{r echo = TRUE, eval = TRUE}
+
+seq_simil <- readRDS(file.path(i_path, "Mantel_test_temporal_sequences_unmarked.RDS"))
+seq_simil 
+
+```
+
+Adjust alpha of 0.05 using a Bonferroni correction. 
+```{r echo = TRUE, eval = TRUE}
+
+# the adjusted alpha by a Bonferroni correction:
+alpha <- 0.05
+
+adj_alpha <- round(alpha/nrow(seq_simil), digits = 4)
+adj_alpha
+
+```
+

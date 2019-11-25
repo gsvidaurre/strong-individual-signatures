@@ -1,0 +1,70 @@
+/* Home page style */
+
+.main {
+  min-width: 450px;
+  max-width: 1220px;
+  margin: 2rem auto;
+  text-align: center;
+}
+.main-title{
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  justify-items: start;
+}
+.title-txt {
+  display: flex;
+  flex-wrap: nowrap;
+  flex-direction: column;
+  align-items: start;
+  margin-left: 1rem; 
+}
+.title, .subtitle, .description {
+  text-align: center;
+}
+.subtitle {
+  font-size: 27px !important;
+}
+.description {
+  color: #004723 !important;
+}
+.menu {
+  text-align: left !important;
+  list-style: none;
+}
+a button.link {
+  color: #000;
+  font-size: 20px;
+  text-decoration: none;
+  border: 1px solid black;
+  border-radius: 5px;
+  padding: 0.5rem 1rem;
+  transition: 0.5s;
+  background: transparent;
+  margin: 0.5rem 0;
+}
+a button.link:hover {
+  color: #0085ff;
+  border: 1px solid #0085ff;
+  background: transparent;
+  cursor: pointer;
+}
+
+a span.repo {
+  color: #000;
+  font-size: 18px;
+  text-decoration: none;
+  transition: font-size 0.5s;
+}
+
+a span.repo:hover {
+  color: darkblue;
+  font-size: 20px;
+}
+
+footer {
+  min-width: 450px;
+  max-width: 1220px;
+  margin: 2rem auto;
+  text-align: left;
+}

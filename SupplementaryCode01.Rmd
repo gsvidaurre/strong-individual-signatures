@@ -1,0 +1,953 @@
+---
+title: <center style="font-size:30px;font-style:normal;color:black;">Supplementary Code 1:</center>
+subtitle: <center style="font-size:30px;font-style:normal;color:#0E0E7D;">Data Pre-processing</center>
+ &nbsp;
+author: |
+  <center style="font-style:normal;">
+  <a style="font-size:22px;color:#337ab7;text-decoration: underline;"href="http://smith-vidaurre.com/"> Grace Smith-Vidaurre</a><sup><span style="font-size:12px;color:black;text-decoration:none!important;">1*</span></sup>, 
+  <a style="font-size:22px;color:#337ab7;text-decoration: underline;"href="http://marceloarayasalas.weebly.com">Marcelo Araya-Salas</a><sup><span style="font-size:12px;color:black;text-decoration:none!important;">2</span></sup>, 
+  <a style="font-size:22px;color:#337ab7;text-decoration: underline;"href="http://wrightbehaviorlab.org">Timothy F. Wright</a><sup><span style="font-size:12px;color:black;text-decoration:none!important;">1</span></sup></center>
+  &nbsp;
+  <center style="font-size:18px;font-style:normal;color:black;"><sup><span style="font-size:12px;color:black;">1</span></sup>Department of Biology, New Mexico State University, <sup><span style="font-size:12px;color:black;">2</span></sup>Recinto de Golfito, Universidad de Costa Rica</center>
+  <br />
+  <center style="font-size:18px;"><sup style="font-size:12px;">*</sup>gsvidaurre@gmail.com</center>
+  &nbsp;
+date: <center style="font-size:22px;font-style:normal;>`r format(Sys.time(), '%d %B, %Y')`</center>
+  <br />
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float:
+      collapsed: false
+---
+
+<style type="text/css">
+
+a:hover {
+  color: #23527c !important;
+}
+
+h1.title {
+  font-size: 32px;
+  color: black;
+  font-weight: normal;
+}
+
+h1 {
+   color: black;
+   font-size: 26px;
+   font-weight: normal;
+}
+
+h2 {
+   color: black;
+   font-size: 24px;
+   font-weight: bold;
+}
+
+h3 {
+   color: black;
+   font-size: 20px;
+   font-weight: normal;
+}
+
+h4 {
+   color: black;
+   font-size: 20px;
+   font-weight: normal;
+}
+
+body{ /* Normal */
+      font-size: 18px;
+  }
+code.r{ /* Code block */
+    font-size: 18px;
+}
+</style>
+
+```{r setup, eval = TRUE, echo = FALSE}
+
+knitr::opts_knit$set(root.dir = "/media/owner/MYIOPSITTA/R/Uruguay2017_MonkParakeet_CallAnalysis/strong-individual-signatures/")
+
+```
+
+We selected calls in Raven prior to running this code. Here we preprocessed calls from the repeated individual and site-level recordings prior to sound analysis and matrix regression. In this code and other supplementary methods, "focal individual(s)" is sometimes used to refer to repeatedly sampled individuals. 
+
+The data provided with this publication was pre-processed using the processing pipeline and code documented below.
+
+Clean environment and install and/or load packages, including the package `warbleR`<a href='#References'><sup>[1]</sup></a>.
+```{r echo = TRUE, eval = FALSE, message = FALSE}
+
+# clean global environment
+rm(list = ls())
+
+###################################
+# install packages from Github
+# install devtools if not installed
+# if (!"devtools" %in% installed.packages()[,"Package"])
+# install.packages("devtools")
+
+# library(devtools)
+# devtools::install_github("maRce10/warbleR")
+
+###################################
+# install packages from CRAN in a loop
+# X <- c("pbapply", "ggplot2", "data.table", "parallel")
+
+# is_installed <- function(p) is.element(p, installed.packages()[,1])
+# 
+# lapply(1:length(X), function(x){
+#   if(!is_installed(X[x])){
+#     install.packages(X[x], repos = "http://lib.stat.cmu.edu/R/CRAN")
+#   }
+# })
+
+###################################
+# load all packages
+X <- c("warbleR", "Rraven", "tuneR", "pbapply", "ggplot2", "data.table", "parallel")
+
+invisible(lapply(X, library, character.only = TRUE))
+
+```
+
+# Repeatedly Sampled Individuals
+
+```{r echo = TRUE, eval = TRUE}
+
+path <- "/media/owner/MYIOPSITTA/R/Uruguay2017_MonkParakeet_CallAnalysis/Data/Focal_Individuals"
+
+```
+
+We imported Raven selection tables for focal individual calls and wrote out the selection table. 
+```{r echo = TRUE, eval = FALSE}
+
+fsels <- Rraven::imp_raven(path, name.from.file = TRUE, ext.case = "upper", freq.cols = FALSE)
+str(fsels)
+
+# are all wav files in selection tables also in the working directory?
+wavs <- list.files(pattern = ".wav$", ignore.case = TRUE)
+unique(fsels$sound.files[!fsels$sound.files %in% wavs])
+
+write.csv(fsels, file.path(path, "focal_individual_sels.csv"), row.names = FALSE)
+
+```
+
+Here we optimized spectrogram parameters. We visually evaluated the resulting spectrogram mosaic to choose the Fourier Transform window, window length and the partitioning of signal amplitude.
+```{r echo = TRUE, eval = FALSE}
+
+# pick a random call to generate a spectrogram mosaic with varying parameters
+set.seed(89)
+r <- sample(x = nrow(fsels), size = 1)
+spec_param(fsels[r, ], length.out = 10, ovlp = 90, wl = c(200, 600), wn = c("hanning", "bartlett", "hamming"),  collev.min = c(-40, -100), pal = "reverse.gray.colors.2", rm.axes = TRUE, nrow = 3, ncol = 3, img.prefix = "spec_param", flim = c(0.5, 9), mar = 0.03, cex = 0.45, path = path)
+
+```
+
+We used the parameters chosen above to generate spectrograms for visual quality control. We added information to selection table spreadsheet about visual call quality, overlapping signals and any other pertintent information during visual inspection. 
+```{r echo = TRUE, eval = FALSE}
+
+specreator(fsels, wn = "hanning", wl = 378, collev = seq(-53, 0, 1), flim = c(0, 10), ovlp = 90, mar = 0.01, res = 300, cex = 0.5, line = FALSE, path = path)
+
+```
+
+We manually added columns (Visual_quality_score, Overlapping_signal	Overlap_section, Bandpass_overlaps_signal_freq_range) to the metadata during visual inspection of spectrograms. We read back in the metadata and added site and individual identity to the focal individual call metadata. 
+```{r echo = TRUE, eval = FALSE}
+
+# read back in the csv with manually added visual quality control columns
+fsels <- read.csv(file.path(path, "focal_individual_sels.csv"))
+str(fsels)
+
+# add a site variable
+fsels$site <- sapply(1:nrow(fsels), function(x){
+  strsplit(strsplit(as.character(fsels$sound.files[x]), split = "_")[[1]][4], split = "-")[[1]][1]
+})
+unique(fsels$site)
+
+# make a column of individual IDs
+fsels$indiv <- sapply(1:nrow(fsels), function(x){
+  strsplit(strsplit(as.character(fsels$sound.files[x]), split = "_")[[1]][5], split = "DIV-")[[1]][2]
+})
+
+# replace long IDs for a 3 character ID per individual
+fsels$indiv <- gsub("UNMARKED-BIRD", "UM", fsels$indiv)
+unique(fsels$indiv)
+
+```
+
+How many calls per individual, and which individuals have < 4 calls?
+```{r echo = TRUE, eval = FALSE}
+
+table(fsels$indiv)
+table(fsels$indiv)[table(fsels$indiv) < 4]
+
+```
+
+We filtered out any calls flagged for overlapping signals and individuals with < 4 calls.
+```{r echo = TRUE, eval = FALSE}
+
+fsels <- fsels[fsels$Overlapping_signal != "Y", ]
+
+fsels <- fsels[-grep(paste(names(table(fsels$indiv)[table(fsels$indiv) < 4]), collapse = "|"), fsels$indiv), ]
+str(fsels)
+
+```
+
+We tailored temporal coordinates of selections to standardize how calls were selected (a single observer, GSV, performed tailoring).
+```{r echo = TRUE, eval = FALSE}
+
+seltailor(fsels, flim = c(0, 9), mar = 0.15, osci = TRUE, auto.next = TRUE, path = path)
+
+# read the seltailor output back in for more preprocessing
+fselst <- read.csv(file.path(path, "seltailor_output.csv"), header = TRUE)
+str(fselst)
+
+```
+
+We filtered out calls with SNR < 7, and decided on a frequency bandpass filter of 0.5 - 9kHz after visual inspection of spectrograms.
+```{r echo = TRUE, eval = FALSE}
+
+# select a good margin for SNR calculations
+# a margin of 0.05 seconds looks good - does not overlap neighboring calls for any of the selected calls
+snrspecs(fselst, osci = TRUE, snrmar = 0.05, wn = "hanning", wl = 378, flim = c(0, 10), ovlp = 90, path = path)
+
+# calculate SNR, using bandpass determined during visual quality control above
+fselst_snr <- sig2noise(X = fselst, mar = 0.05, type = 1, bp = c(0.5, 9), wl = 378, path = path)
+# str(fselst_snr)
+
+# remove calls with SNR < 7
+length(which(fselst_snr$SNR < 7)) # only 2 calls will be removed
+fselst_snr <- fselst_snr[-which(fselst_snr$SNR < 7), ]
+# str(fselst_snr) 
+# nrow(fselst_snr) 
+
+# remove any calls that were flagged as low quality in visual inspections
+fselst_snr <- fselst_snr[fselst_snr$Visual_quality_score != "L", ]
+# str(fselst_snr)
+# nrow(fselst_snr)
+
+```
+
+We saved the preprocessed metadata and calls. 
+```{r echo = TRUE, eval = FALSE}
+
+# save preprocessed selection table as a csv file
+write.csv(fselst_snr, file.path(path, "indiv_scale_calls_preprocessed.csv"), row.names = FALSE)
+
+```
+
+Make an extended selection table of repeatedly sampled individual calls. 
+```{r echo = TRUE, eval = FALSE}
+
+fselst_snr <- read.csv(file.path(path, "indiv_scale_calls_preprocessed.csv"), header = TRUE)
+
+cores <- parallel::detectCores() - 2
+indiv_sels_tbl <- selection_table(X = fselst_snr, whole.recs = FALSE, extended = TRUE, confirm.extended = TRUE, mar = 0.1, parallel = cores, path = path) 
+
+# save the extended selection table as an RDS object
+# this object will be provided in Supplementary Material as a means to share the focal individual calls and associated selection table with metadata
+saveRDS(indiv_sels_tbl, file.path(path, "indiv_scale_extended_seltable.RDS"))
+
+```
+
+How to access different components of an extended selection table:
+```{r echo = TRUE, eval = FALSE}
+
+indiv_sels_tbl <- readRDS(file.path(path, "indiv_scale_extended_seltable.RDS"))
+str(indiv_sels_tbl)
+
+# access the selection table (with metadata) data frame
+dim(indiv_sels_tbl) # 97 calls, 14 columns
+names(indiv_sels_tbl) # column names
+
+# access the wave objects
+length(attr(indiv_sels_tbl, "wave.objects"))
+attr(indiv_sels_tbl, "wave.objects")[1]
+
+# you can write these out as wave objects in your working directory to facilitate reproducing analyses:
+wavs <- attr(indiv_sels_tbl, "wave.objects")
+wav_nms <- names(attr(indiv_sels_tbl, "wave.objects"))
+
+# x <- 1 testing
+invisible(lapply(1:length(wavs), function(x){
+  writeWave(wavs[[x]], filename = wav_nms[x], extensible = FALSE)
+}))
+
+# access the check results data frame
+attr(indiv_sels_tbl, "check.results")
+
+```
+
+```{r echo = FALSE, eval = TRUE}
+
+fselst_snr <- read.csv(file.path(path, "indiv_scale_calls_preprocessed.csv"), header = TRUE)
+# str(fselst_snr)
+
+```
+
+We used the pre-processed focal individual calls to make call lexicons per individual. 
+```{r echo = TRUE, eval = FALSE}
+
+i <- unique(fselst_snr$indiv)
+
+invisible(lapply(1:length(i), function(x){
+  catalog(fselst_snr[fselst_snr$indiv == i[x], ], wn = "hanning", wl = 378, collev = seq(-53, 0, 1), flim = c(0, 10), ovlp = 90, mar = 0.01, labels = c("sound.files", "selec"), tags = c("selec"), tag.pal = list(topo.colors, heat.colors), res = 300, img.suffix = paste("INDIV", i[x], sep = "-"), cex = 0.5, path = path)
+}))
+
+catalog2pdf(by.img.suffix = TRUE, keep.img = FALSE, path = path)
+
+```
+
+Visual inspection of catalogs revealed that monk parakeets produce consistent and distinctive calls (e.g. high acoustic similarity within individuals), such that contact call structure appeared to be characterized by individual signatures.
+
+# Higher Social Scales
+
+We encoded duplicate recording sessions per site by adding a binary column (Y, N) to the metadata by hand prior to running this code. When sites had duplicate sessions (e.g. if recording was repeated due to poor weather or timing the first time around), we chose the recording session with the highest number and quality calls. However, we preprocessed all calls across the data set and did not remove duplicate sessions just prior to sound analysis (Supplementary Methods 2). 
+
+We imported Raven selection tables with temporal coordinates of selected calls across sites.
+```{r echo = TRUE, eval = TRUE}
+
+path <- "/media/owner/MYIOPSITTA/R/Uruguay2017_MonkParakeet_CallAnalysis/Data/Site_Recordings"
+
+```
+
+```{r echo = TRUE, eval = FALSE}
+
+cc_sels <- Rraven::imp_raven(path = path, name.from.file = TRUE, ext.case = "upper", freq.cols = FALSE)
+# str(cc_sels) 
+
+```
+
+We merged the selection table with the existing metadata for selected calls, which we generated while selecting calls in Raven to record information about call quality or social context (e.g., group size). 
+```{r echo = TRUE, eval = FALSE}
+
+ccs <- read.csv(file.path(path, "SelectedContactCalls_MASTER_14_MAY_18_GSV.csv"), header = TRUE)
+# str(ccs)
+
+# make a column of unique call IDs to merge Raven selection table with existing metadata
+names(ccs)
+names(cc_sels)
+
+ccs$uniq_nm <- paste(ccs$Selection_table, ccs$Selection_ID, sep = "-")
+cc_sels$uniq_nm <- paste(cc_sels$selec.file, cc_sels$selec, sep = "-")
+
+ccs <- dplyr::full_join(ccs, cc_sels, by = "uniq_nm")
+# str(ccs)
+
+write.csv(ccs, file.path(path, "higher_social_scales_calls_preprocessed.csv"), row.names = FALSE)
+
+```
+
+We added geographic coordinates and additional metadata columns to the site-level metadata. 
+```{r echo = TRUE, eval = FALSE}
+
+# read in updated metadata 
+ccs <- read.csv(file.path(path, "higher_social_scales_calls_preprocessed.csv"), header = TRUE)
+
+# read in geographic coordinates by site
+wp <- read.csv(file.path(path, "recording_waypoints.csv"), header = TRUE)
+# str(wp)
+
+# make latitude, longitude and department vectors
+# x <- 1
+ccs$lat <- unlist(lapply(1:nrow(ccs), function(x){
+  wp$Latitude[grep(as.character(ccs$Site[x]), wp$Site, fixed = TRUE)]
+}))
+
+ccs$lon <- unlist(lapply(1:nrow(ccs), function(x){
+  wp$Longitude[grep(as.character(ccs$Site[x]), wp$Site, fixed = TRUE)]
+}))
+
+ccs$dept <- unlist(lapply(1:nrow(ccs), function(x){
+  wp$Department[grep(as.character(ccs$Site[x]), wp$Site, fixed = TRUE)]
+}))
+
+# make a rec_ID column for catalog labels
+ccs$rec_ID <- unlist(lapply(1:nrow(ccs), function(x){
+  strsplit(as.character(ccs$Raw_File_Name[x]), split = ".WAV$")[[1]][1]
+}))
+# str(ccs)
+
+# update the current metadata
+write.csv(ccs, file.path(path, "higher_social_scales_calls_preprocessed.csv"), row.names = FALSE)
+
+```
+
+```{r echo = FALSE, eval = TRUE}
+
+ccs <- read.csv(file.path(path, "higher_social_scales_calls_preprocessed.csv"), header = TRUE)
+
+```
+
+We made spectrograms for visual quality control filtering. During visual inspection, we added information to the metadata spreadsheet about visual call quality, overlapping signals and any other pertintent information. 
+```{r echo = TRUE, eval = FALSE}
+
+specreator(ccs, wn = "hanning", wl = 378, collev = seq(-53, 0, 1), flim = c(0, 10), ovlp = 90, mar = 0.01, res = 300, cex = 0.5, line = FALSE, path = path)
+
+```
+
+We made call lexicons by site to visualize variation within and among sites, as well as to identify potential calls from repeated individuals. 
+```{r echo = TRUE, eval = FALSE}
+
+# order data frame by longitude (W to E), then by latitude (N to S)
+ccs <- ccs[order(ccs$lon, ccs$lat, decreasing = c(FALSE, TRUE), method = "radix"), ]
+
+sapply(1:length(unique(ccs$General_site)), function(x){
+  catalog(ccs[ccs$General_site == as.character(unique(ccs$General_site)[x]), ], flim = c(0, 9), labels = c("General_site", "rec_ID", "selec"), same.time.scale = TRUE, collev = seq(-53, 0, 1), ovlp = 90, wl = 378, wn = "hanning", res = 150, cex = 0.8, mar = 0.005, sub.legend = TRUE, orientation = "h", leg.wd = 2, img.suffix = as.character(unique(ccs$General_site)[x]), path = path)
+})
+
+# collapse jpeg image files per site into a single pdf file
+# printed these lexicons to identify potential calls from repeated individuals by visual inspection
+catalog2pdf(keep.img = FALSE, by.img.suffix = TRUE, path = path)
+
+```
+
+We tailored temporal coordinates to standardize how calls were selected (a single observer, GSV, performed tailoring).
+```{r echo = TRUE, eval = FALSE}
+
+# make a temporary title per spectrogram for seltailor
+ccs$spec.title <- ""
+# str(ccs)
+
+# manually change the name of seltailor_output.csv to site-level_calls_preprocessed.csv 
+# seltailor retains all other metadata, with the tailored start and end coordinates and a column indicating whether or not the signal coordinates were tailored
+seltailor(X = ccs, flim = c(0, 9), mar = 0.2, osci = TRUE, title = "spec.title", wn = "hanning", wl = 378, ovlp = 90, collev = seq(-53, 0, 1), auto_next = TRUE, path = path)
+
+```
+
+```{r echo = FALSE, eval = TRUE}
+
+ccs <- read.csv(file.path(path, "higher_social_scales_calls_preprocessed.csv"), header = TRUE)
+
+```
+
+We pre-processed site-level calls for sound analysis. 
+```{r echo = TRUE, eval = TRUE}
+
+# total original recording sites
+length(levels(ccs$General_site)) 
+
+# total calls prior to preprocessing
+nrow(ccs)
+
+```
+
+We removed duplicate recording sessions.
+```{r echo = TRUE, eval = TRUE}
+
+ccs <- ccs[!ccs$Duplicate_session == "Y", ]
+nrow(ccs)
+
+```
+
+Summary statistics of potential repeated individual calls. 
+```{r echo = TRUE, eval = TRUE}
+
+ri_sub <- ccs[which(ccs$Repeated_individual == "Y" & ccs$If_repeated_use == "N"), ]
+
+```
+
+How many calls were identified as potential repeated individuals?
+```{r echo = TRUE, eval = TRUE}
+
+nrow(ri_sub)
+
+```
+
+At how many sites, and which sites?
+```{r echo = TRUE, eval = TRUE}
+
+length(table(ri_sub$General_site)[which(table(ri_sub$General_site) != 0)])
+table(ri_sub$General_site)[which(table(ri_sub$General_site) != 0)]
+
+```
+
+Over these sites, what was the mean and range number of potential repeated individual calls?
+```{r echo = TRUE, eval = TRUE}
+
+mean(table(ri_sub$General_site)[which(table(ri_sub$General_site) != 0)])
+range(table(ri_sub$General_site)[which(table(ri_sub$General_site) != 0)])
+
+```
+
+We removed potential repeated individual calls. 
+```{r echo = TRUE, eval = TRUE}
+
+ccs <- ccs[-which(ccs$Repeated_individual == "Y" & ccs$If_repeated_use == "N"), ]
+nrow(ccs) # how many calls remain?
+
+```
+
+We removed calls that were visually flagged as poor quality or overlapping with other acoustic signals (that interfered with a bandpass filter of 0.5 - 9 kHz).
+```{r echo = TRUE, eval = TRUE}
+
+ccs <- ccs[-which(ccs$Visual_quality_score == "L"), ]
+
+# some calls (10 total) had horizontal streaks that appeared to be due to amplitude saturation
+ccs <- ccs[!ccs$Amplitude_saturation == "Y", ]
+nrow(ccs)
+
+ccs <- ccs[-which(ccs$Overlapping_signal == "Y" & ccs$Bandpass_overlaps_signal_freq_range == "Y"), ]
+
+```
+
+Sample size across sites?
+```{r echo = TRUE, eval = TRUE}
+
+nrow(ccs)
+table(ccs$General_site)
+
+```
+
+Sites with < 5 calls?
+```{r echo = TRUE, eval = TRUE}
+
+table(ccs$General_site)[which(table(ccs$General_site) < 5)]
+
+```
+
+We removed sites with < 5 calls (INES-02, LACA, PFER-02).
+```{r echo = TRUE, eval = TRUE}
+
+ccs <- ccs[-grep("INES-02|LACA|PFER-02", ccs$General_site), ]
+nrow(ccs) # number of calls remaining
+
+```
+
+We calculated SNR across site-level calls. 
+```{r echo = TRUE, eval = FALSE}
+
+# check all spectrograms - can the margin of 0.05 that was used for focal individuals work for site level calls?
+# it cannot, as that margin sometimes overlaps neighboring calls
+# a margin of 0.01 seconds works, but there are 7 calls for which it does not work (calls delivered one after another)
+snrspecs(ccs, osci = TRUE, snrmar = 0.01, wn = "hanning", wl = 378, flim = c(0, 10), ovlp = 90, path = path)
+
+# we manually added a new column to metadata csv for whether or not SNR margin of 0.01s worked
+
+# we calculated standard SNR (noise before and after signal) only for calls for which the SNR margin of 0.01s worked
+
+# 7 calls for which SNR margin did not work
+nrow(ccs[grep("^N$", ccs$SNR_mar_works), ])
+
+# 5 of these calls have overlapping signals (e.g. a call from the other bird in the pair or flock) that interfered with the SNR margin at the end of the call, so we calculated SNR before the signal only
+nrow(ccs[grepl("^N$", ccs$SNR_mar_works) & ccs$SNR_mar_overlap_section == "E", ])
+
+# we calculated SNR across calls with a margin of 0.01s
+df_SNR <- sig2noise(X = ccs[, grep("sound.files|^selec$|^start$|^end$", names(ccs))], mar = 0.01, type = 1, bp = c(0.5, 9), wl = 378, path = path)
+nrow(df_SNR)
+
+# we recalculated SNR for those calls for which the SNR margin of 0.01s did not work, and that were closely followed by neighboring signals. We used the sig2noise option to calulcate SNR only before the call
+df_SNR2 <- sig2noise(X = ccs[grepl("^N$", ccs$SNR_mar_works) & ccs$SNR_mar_overlap_section == "E", grep("sound.files|^selec$|^start$|^end$", names(ccs))], mar = 0.01, type = 1, bp = c(0.5, 9), before = TRUE, wl = 378, path = path)
+nrow(df_SNR2)
+
+# SNR improved, as expected
+df_SNR$SNR[grepl("^N$", ccs$SNR_mar_works) & ccs$SNR_mar_overlap_section == "E"] 
+df_SNR2$SNR
+
+# we replaced the SNR calculation for those calls
+df_SNR$SNR[grepl("^N$", ccs$SNR_mar_works) & ccs$SNR_mar_overlap_section == "E"] <- df_SNR2$SNR
+
+# for the 2 remaining calls for which the SNR margin of 0.01s did not work, and which were closely preceded by a neighboring call, we used the SNR of the preceding call. sig2noise does not currently have the option to calculate SNR after a given signal, and the following solution ensured that the assigned SNR originated from the local call context.
+df_SNR$SNR[grep("2017_07_28_ECIL-02_1182.WAV-3", ccs$uniq_nm)] <- df_SNR$SNR[grep("2017_07_28_ECIL-02_1182.WAV-2", ccs$uniq_nm)] 
+
+df_SNR$SNR[grep("2017_09_13_ELTE_1399.WAV-8", ccs$uniq_nm)] <- df_SNR$SNR[grep("2017_09_13_ELTE_1399.WAV-7", ccs$uniq_nm)] 
+
+```
+
+We removed calls with SNR < 7, the same quality filter as performed on the focal individual calls. 
+```{r echo = TRUE, eval = FALSE}
+
+ccs <- data.frame(ccs, SNR = df_SNR$SNR)
+str(ccs)
+
+# how many calls with SNR < 7 and how spread out across sites?
+nrow(df_SNR[df_SNR$SNR < 7, ]) # 2 calls with SNR < 7 
+unique(ccs$General_site[which(df_SNR$SNR < 7)]) # at FAGR only
+
+ccs <- ccs[ccs$SNR >= 7, ]
+
+# write out the current metadata
+write.csv(ccs, file.path(path, "higher_social_scales_calls_preprocessed_final.csv"), row.names = FALSE)
+
+```
+
+Make an extended selection table of calls for higher social scales
+```{r echo = TRUE, eval = FALSE}
+
+ccs <- read.csv(file.path(path, "higher_social_scales_calls_preprocessed_final.csv"), header = TRUE)
+str(ccs)
+
+cores <- parallel::detectCores() - 2
+hss_sels_tbl <- selection_table(X = ccs, whole.recs = FALSE, extended = TRUE, confirm.extended = TRUE, mar = 0.1, parallel = cores, path = path) 
+
+# write out extended selection table as an RDS object
+saveRDS(hss_sels_tbl, file.path(path, "higher_social_scales_extended_seltable.RDS"))
+
+```
+
+The different components of the site-level extended selection table can be accessed as per the focal individual extended selection table (see code above), to facilitate reproducing subsequent analyses. 
+```{r echo = FALSE, eval = FALSE}
+
+# maintained this for my own checks
+hss_sels_tbl <- readRDS(file.path(path, "higher_social_scales_extended_seltable.RDS"))
+str(hss_sels_tbl)
+
+# access the selection table (with metadata) data frame
+dim(hss_sels_tbl) # 605 calls, 61 columns
+names(hss_sels_tbl) # column names
+
+# access the call wave objects
+length(attr(hss_sels_tbl, "wave.objects"))
+attr(hss_sels_tbl, "wave.objects")[1]
+
+# you can write these out as wave objects in your working directory to facilitate reproducing analyses:
+wavs <- attr(hss_sels_tbl, "wave.objects")
+wav_nms <- names(attr(hss_sels_tbl, "wave.objects"))
+
+# x <- 1 testing
+invisible(lapply(1:length(wavs), function(x){
+  writeWave(wavs[[x]], filename = file.path(path, wav_nms[x]), extensible = FALSE)
+}))
+
+# access the check results data frame
+attr(hss_sels_tbl, "check.results")
+
+```
+ 
+# Summary Statistics
+
+## Individual
+
+How many total repeatedly sampled individual calls remained after pre-processing?
+```{r echo = TRUE, eval = TRUE}
+
+nrow(fselst_snr)
+
+```
+
+Calls per repeatedly sampled individual.
+```{r echo = TRUE, eval = TRUE}
+
+table(fselst_snr$indiv)
+
+```
+
+Mean number of calls per individual.
+```{r echo = TRUE, eval = TRUE}
+
+mean(table(fselst_snr$indiv))
+
+```
+
+Range of calls per individual.
+```{r echo = TRUE, eval = TRUE}
+
+range(table(fselst_snr$indiv))
+
+```
+
+Calls by repeatedly sampled individuals and sites.
+```{r echo = TRUE, eval = TRUE}
+
+table(fselst_snr$indiv, fselst_snr$site)
+
+```
+
+Mean and range of SNR across calls.
+```{r echo = TRUE, eval = TRUE}
+
+mean(fselst_snr$SNR)
+range(fselst_snr$SNR)
+
+```
+
+We read back in final preprocessed set of calls for higher social scales.
+```{r echo = FALSE, eval = TRUE}
+
+ccs <- read.csv(file.path(path, "higher_social_scales_calls_preprocessed_final.csv"), header = TRUE)
+
+```
+
+Dates for recording sessions by site?
+```{r echo = TRUE, eval = FALSE}
+
+sites <- as.character(unique(ccs$General_site))
+
+dates <- sapply(1:length(sites), function(x){
+  
+  tmp <- ccs[grep(sites[x], ccs$General_site), ]
+  unique(paste(tmp$Day, tmp$Month, sep = "-"))
+  
+})
+
+data.frame(dates, sites)
+
+```
+
+We defined pairs as groups of 2 birds for which we had calls for both birds in the pair. The pair social scale was nested within the site scale, and was represented by a subset of calls in the site-level data set.
+
+We extracted unique overall group ID from the site-level metadata.
+```{r echo = TRUE, eval = TRUE}
+
+gid <- unique(ccs$Overall_group_ID)[!is.na(unique(ccs$Overall_group_ID))]
+length(gid)
+
+```
+
+We collected information about all groups of birds flying together (pairs and flocks) in the data set for summary statistics.
+```{r echo = TRUE, eval = TRUE}
+
+# filter the site-level data by all groups and generate a data frame that can be easily parsed for summary stats
+gid_size <- lapply(1:length(gid), function(x){
+  
+  pat <- paste("^", gid[x], "$", sep = "")
+  
+  st <- unique(ccs$General_site[grep(pat, ccs$Overall_group_ID)])
+  gi <- unique(ccs$Flock_ID[grep(pat, ccs$Overall_group_ID)])
+  pid <- unique(ccs$Pair_ID[grep(pat, ccs$Overall_group_ID)])
+  gs <- unique(ccs$Group_size[grep(pat, ccs$Overall_group_ID)])
+  cn <- length(ccs$Group_size[grep(pat, ccs$Overall_group_ID)])
+  
+  return(data.frame(site = st, overall_group_id = gid[x], flock_ID = gi, pair_ID = pid, group_size = gs, call_num = cn))
+})
+gid_size <- data.table::rbindlist(gid_size)
+
+# filter by groups for which we had > 1 call (e.g. remove groups for which only a single call remained after preprocessing)
+gidf <- droplevels(gid_size[gid_size$call_num > 1, ])
+# View(gidf)
+
+```
+
+## Pair
+
+```{r echo = TRUE, eval = TRUE}
+
+pairs <- droplevels(gidf[!is.na(gidf$pair_ID), ])
+
+```
+
+```{r echo = TRUE, eval = FALSE}
+
+# save the pair IDs for Supplementary Methods 3
+saveRDS(pairs$pair_ID, file.path(path, "pair_IDs.RDS"))
+
+```
+
+Mean and range of pairs across sites?
+```{r echo = TRUE, eval = TRUE}
+
+range(table(pairs$site)) 
+mean(table(pairs$site)) 
+
+```
+
+How many pairs?
+```{r echo = TRUE, eval = TRUE}
+
+nrow(pairs)
+
+```
+
+How many calls in the site-level data set represent this social scale?
+```{r echo = TRUE, eval = TRUE}
+
+sum(pairs$call_num)
+sum(pairs$call_num)/nrow(ccs)
+
+```
+
+How many sites had pairs?
+```{r echo = TRUE, eval = TRUE}
+
+length(table(pairs$site))
+
+```
+
+How many pairs by site?
+```{r echo = TRUE, eval = TRUE}
+
+table(pairs$site)
+
+```
+
+Mean and range of pairs across sites?
+```{r echo = TRUE, eval = TRUE}
+
+range(table(pairs$site)) 
+mean(table(pairs$site)) 
+
+```
+
+How many and which sites have > 2 pairs?
+```{r echo = TRUE, eval = TRUE}
+
+length(table(pairs$site)[which(table(pairs$site) > 1)])
+table(pairs$site)[which(table(pairs$site) > 1)]
+
+```
+
+## Flock
+
+We defined flocks as groups of 3 or more birds flying together for which we had 2 or more calls. This social scale was nested within the site scale, and represented by a subset of calls in the site-level data set. 
+
+How many flocks total? 
+```{r echo = TRUE, eval = TRUE}
+
+nrow(gid_size[gid_size$group_size > 2, ])
+
+```
+
+How many flocks remain (e.g. flocks for which we had more than 1 call)?
+```{r echo = TRUE, eval = TRUE}
+
+flocks <- droplevels(gidf[gidf$group_size > 2, ])
+nrow(flocks)
+
+```
+
+```{r echo = TRUE, eval = FALSE}
+
+# save the flock IDs for Supplementary Methods 3
+saveRDS(flocks$flock_ID, file.path(path, "flock_IDs.RDS"))
+
+```
+
+Mean and range of flock size across the data set?
+```{r echo = TRUE, eval = TRUE}
+
+mean(flocks$group_size)
+range(flocks$group_size)
+
+```
+
+How many calls from the site-level data set correspond to these flocks?
+```{r echo = TRUE, eval = TRUE}
+
+sum(flocks$call_num)
+sum(flocks$call_num)/nrow(ccs)
+
+```
+
+How many sites had flocks?
+```{r echo = TRUE, eval = TRUE}
+
+length(table(flocks$site))
+
+```
+
+How many flocks by site?
+```{r echo = TRUE, eval = TRUE}
+
+table(flocks$site)
+
+```
+
+Mean and range of flocks across sites?
+```{r echo = TRUE, eval = TRUE}
+
+range(table(flocks$site)) 
+mean(table(flocks$site)) 
+
+```
+
+How many and which sites have > 2 flocks?
+```{r echo = TRUE, eval = TRUE}
+
+length(table(flocks$site)[which(table(flocks$site) > 1)])
+table(flocks$site)[which(table(flocks$site) > 1)]
+
+```
+
+## Site
+
+How many total calls were retained for subsequent sound analysis at this social scale?
+```{r echo = TRUE, eval = TRUE}
+
+nrow(ccs)
+
+```
+
+How many sites represented?
+```{r echo = TRUE, eval = TRUE}
+
+length(table(ccs$General_site))
+
+```
+
+How many calls by site?
+```{r echo = TRUE, eval = TRUE}
+
+table(ccs$General_site)
+
+```
+
+Mean and range of calls by site?
+```{r echo = TRUE, eval = TRUE}
+
+mean(table(ccs$General_site))
+range(table(ccs$General_site))
+
+```
+
+How many calls by department? Uruguay is sub-divided into 19 departments, and we sampled across 7 departments (representaive of a regional scale for matrix regression with geographic distance, see Supplementary Methods 3).
+```{r echo = TRUE, eval = TRUE}
+
+table(ccs$dept)
+
+```
+
+Mean and range SNR across calls?
+```{r echo = TRUE, eval = TRUE}
+
+mean(ccs$SNR)
+range(ccs$SNR)
+
+```
+
+## Sites - Colonia
+
+Colonia was the westernmost department of our geographic transect, where we sampled most intensively.
+
+How many total calls were retained for subsequent sound analysis?
+```{r echo = TRUE, eval = TRUE}
+
+Colonia <- droplevels(ccs[grep("Colonia", ccs$dept), ])
+nrow(Colonia)
+nrow(Colonia)/nrow(ccs) # proportion of all calls
+
+```
+
+How many sites are represented?
+```{r echo = TRUE, eval = TRUE}
+
+length(table(Colonia$General_site))
+
+```
+
+How many calls by site?
+```{r echo = TRUE, eval = TRUE}
+
+table(Colonia$General_site)
+
+```
+
+Mean and range of calls by site?
+```{r echo = TRUE, eval = TRUE}
+
+mean(table(Colonia$General_site))
+range(table(Colonia$General_site))
+
+```
+
+Mean and range SNR across calls?
+```{r echo = TRUE, eval = TRUE}
+
+mean(Colonia$SNR)
+range(Colonia$SNR)
+
+```
+
+Check out Supplementary Methods 2 for sound analysis. The extended selection tables for the individual and higher social scales contain the selected contact calls used for analyses in Supplementary Methods 2.
+
+# References
+
+    1. Araya‐Salas, M., & Smith‐Vidaurre, G. 2017. warbleR: An R package to streamline analysis of animal acoustic signals. Methods in Ecology and Evolution 8(2), 184-191.

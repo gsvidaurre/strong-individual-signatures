@@ -1,0 +1,841 @@
+---
+title: <center style="font-size:30px;font-style:normal;color:black;">Supplementary Code 3:</center>
+subtitle: <center style="font-size:30px;font-style:normal;color:#0E0E7D;">Mantel Tests & Spatial Autocorrelation</center>
+ &nbsp;
+author: |
+  <center style="font-style:normal;">
+  <a style="font-size:22px;color:#337ab7;text-decoration: underline;"href="http://smith-vidaurre.com/"> Grace Smith-Vidaurre</a><sup><span style="font-size:12px;color:black;text-decoration:none!important;">1*</span></sup>, 
+  <a style="font-size:22px;color:#337ab7;text-decoration: underline;"href="http://marceloarayasalas.weebly.com">Marcelo Araya-Salas</a><sup><span style="font-size:12px;color:black;text-decoration:none!important;">2</span></sup>, 
+  <a style="font-size:22px;color:#337ab7;text-decoration: underline;"href="http://wrightbehaviorlab.org">Timothy F. Wright</a><sup><span style="font-size:12px;color:black;text-decoration:none!important;">1</span></sup></center>
+  &nbsp;
+  <center style="font-size:18px;font-style:normal;color:black;"><sup><span style="font-size:12px;color:black;">1</span></sup>Department of Biology, New Mexico State University, <sup><span style="font-size:12px;color:black;">2</span></sup>Recinto de Golfito, Universidad de Costa Rica</center>
+  <br />
+  <center style="font-size:18px;"><sup style="font-size:12px;">*</sup>gsvidaurre@gmail.com</center>
+  &nbsp;
+date: <center style="font-size:22px;font-style:normal;>`r format(Sys.time(), '%d %B, %Y')`</center>
+  <br />
+output: 
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float:
+      collapsed: false
+---
+
+<style type="text/css">
+
+a:hover {
+  color: #23527c !important;
+}
+
+h1.title {
+  font-size: 32px;
+  color: black;
+  font-weight: normal;
+}
+
+h1 {
+   color: black;
+   font-size: 26px;
+   font-weight: normal;
+}
+
+h2 {
+   color: black;
+   font-size: 24px;
+   font-weight: bold;
+}
+
+h3 {
+   color: black;
+   font-size: 20px;
+   font-weight: normal;
+}
+
+h4 {
+   color: black;
+   font-size: 20px;
+   font-weight: normal;
+}
+
+body{ /* Normal */
+      font-size: 18px;
+  }
+code.r{ /* Code block */
+    font-size: 18px;
+}
+</style>
+
+We evaluated patterns of acoustic similarity over social scales and geographic distance. We used Mantel tests<a href='#References'><sup>[1]</sup></a> to ask whether contact calls were more similar within social groups compared to among social groups at each social scale. We used Mantel tests and Mantel-based spatial autocorrelation to evaluate whether acoustic similarity decreased linearly over increasing geographic distance. 
+
+Our overall results can be reproduced by using the data provided with this publication (extended selection tables for the individual and higher social scales, and selection table spreadsheets). Some changes to this code may be necessary, such as directories used for analysis.
+
+We ran sound analysis in Supplementary Methods 2 to calculate acoustic similarity by SPCC and random forests. As before, we sometimes use the naming convention "site-level" to refer to calls for higher social scales. 
+```{r setup, eval = TRUE, echo = FALSE}
+
+knitr::opts_knit$set(root.dir = "/media/owner/MYIOPSITTA/R/Uruguay2017_MonkParakeet_CallAnalysis/")
+
+```
+
+```{r echo = TRUE, eval = TRUE, message = FALSE}
+
+rm(list = ls())
+
+X <- c("ggplot2", "vegan", "pbapply", "parallel", "data.table", "facetscales", "rgeos", "rgdal", "sp", "tidyverse")
+
+invisible(lapply(X, library, character.only = TRUE))
+
+```
+
+```{r echo = TRUE, eval = TRUE}
+
+path <- "/media/owner/MYIOPSITTA/R/Uruguay2017_MonkParakeet_CallAnalysis/Data"
+
+```
+
+Pre-processed repeatedly sampled individual selection table and metadata.
+```{r echo = TRUE, eval = TRUE}
+
+ccs_fi <- read.csv(file.path(path, "Focal_Individuals/indiv_scale_calls_preprocessed.csv"), header = TRUE)
+
+```
+
+Pre-processed higher social scale call selection table and metadata.
+```{r echo = TRUE, eval = TRUE}
+
+ccs <- read.csv(file.path(path, "Site_Recordings/higher_social_scales_calls_preprocessed_final.csv"), header = TRUE)
+
+ccs$call_ID <- paste(ccs$sound.files, ccs$selec, sep = "-")
+
+```
+
+# Pairwise Geographic Distance
+
+Project geographic coordinates and calculate pairwise distance among sites at different geographic scales.
+```{r echo = TRUE, eval = FALSE}
+
+# need to convert to Spatial Points object
+mat <- as.matrix(data.frame(lon = ccs$lon, lat = ccs$lat))
+sp_pts <- SpatialPoints(mat, proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+
+# access EPSG codes to reproject in meters
+# used EPSG 5383 for Uruguay
+epsg <- rgdal::make_EPSG()
+# str(epsg)
+
+epsg[grep("^5383$", epsg$code), ]
+
+# reproject
+sp_pts <- sp::spTransform(sp_pts, CRSobj = CRS(epsg$prj4[grep("^5383$", epsg$code)]))
+# bbox(sp_pts)
+# proj4string(sp_pts)
+
+# calculate pairwise distances among all sites
+geo_dists <- rgeos::gDistance(sp_pts, byid = TRUE)
+# str(geo_dists)
+
+# repeat for Colonia
+Colonia <- ccs[grep("Colonia", ccs$dept), ]
+
+mat <- as.matrix(data.frame(lon = Colonia$lon, lat = Colonia$lat))
+sp_pts <- SpatialPoints(mat, proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+
+# reproject
+sp_pts <- sp::spTransform(sp_pts, CRSobj = CRS(epsg$prj4[grep("^5383$", epsg$code)]))
+# bbox(sp_pts)
+# proj4string(sp_pts)
+
+# calculate pairwise distances among all sites
+geo_distsC <- rgeos::gDistance(sp_pts, byid = TRUE)
+# str(geo_distsC)
+
+# repeat for all sites except Salto
+tmp <- droplevels(data.frame(lat = ccs$lat[-grep("ARAP", ccs$General_site)], lon = ccs$lon[-grep("ARAP", ccs$General_site)], site = ccs$General_site[-grep("ARAP", ccs$General_site)]))
+
+mat <- as.matrix(data.frame(lon = tmp$lon, lat = tmp$lat))
+sp_pts <- SpatialPoints(mat, proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+
+# reproject
+sp_pts <- sp::spTransform(sp_pts, CRSobj = CRS(epsg$prj4[grep("^5383$", epsg$code)]))
+# bbox(sp_pts)
+# proj4string(sp_pts)
+
+# calculate pairwise distances among all sites
+geo_dists2 <- rgeos::gDistance(sp_pts, byid = TRUE)
+# str(geo_dists2)
+
+path <- "/media/owner/MYIOPSITTA/R/Uruguay2017_MonkParakeet_CallAnalysis/Data/Site_Recordings"
+
+saveRDS(geo_dists, file.path(path, "geo_dists.RDS"))
+saveRDS(geo_dists2, file.path(path, "geo_dists2.RDS"))
+saveRDS(geo_distsC, file.path(path, "geo_distsC.RDS"))
+
+```
+
+```{r echo = TRUE, eval = TRUE}
+
+path <- "/media/owner/MYIOPSITTA/R/Uruguay2017_MonkParakeet_CallAnalysis/Data/Site_Recordings"
+
+geo_dists <- readRDS(file.path(path, "geo_dists.RDS"))
+geo_dists2 <- readRDS(file.path(path, "geo_dists2.RDS"))
+geo_distsC <- readRDS(file.path(path, "geo_distsC.RDS"))
+
+```
+
+## Summary Statistics
+
+We generated summary statistics of geographic distances in the full and Colonia site data sets.
+
+Mean and range of pairwise geographic distances among all sites? In kilometers.
+```{r echo = TRUE, eval = TRUE}
+
+mean(geo_dists)/1000
+
+range(geo_dists[geo_dists != 0])/1000 
+
+# all sites except ARAP in the Salto department
+mean(geo_dists2)/1000
+
+range(geo_dists2[geo_dists2 != 0])/1000 
+
+```
+
+Mean and range of pairwise geographic distances among Colonia sites? Also in kilometers.
+```{r echo = TRUE, eval = TRUE}
+
+mean(geo_distsC)/1000
+
+range(geo_distsC[geo_distsC != 0])/1000 
+
+```
+
+# Similarity Matrices
+
+We prepared similarity matrices for analysis.
+```{r echo = TRUE, eval = TRUE}
+
+path <- "/media/owner/MYIOPSITTA/R/Uruguay2017_MonkParakeet_CallAnalysis/Data"
+
+xc_mat <- readRDS(file.path(path, "Site_Recordings/xc_mat_higher_social_scales.RDS"))
+
+proxm_site <- readRDS(file.path(path, "Site_Recordings/proxm_site.RDS"))
+
+xc_mat_fi <- readRDS(file.path(path, "Focal_Individuals/xc_mat_indiv_scale.RDS"))
+
+```
+
+```{r echo = TRUE, eval = TRUE}
+
+# site calls for site, flock and pair social scales
+xc_dist <- stats::as.dist(1 - xc_mat, diag = TRUE, upper = TRUE)
+# str(xcdist)
+
+rf_dist <- stats::as.dist(1 - proxm_site, diag = TRUE, upper = TRUE)
+# str(rf_dist)
+
+# repeatedly sampled individual calls for individual scale
+xcdist_fi <- stats::as.dist(1 - xc_mat_fi, diag = TRUE, upper = TRUE)
+# str(xcdist_fi)
+
+```
+
+We prepared additional data for Mantel tests, including a call ID variable.
+```{r echo = TRUE, eval = TRUE}
+
+# site calls
+ccs$call_ID <- paste(ccs$sound.files, ccs$selec, sep = "-")
+
+ccs$call_ID <- sapply(1:nrow(ccs), function(x){
+  tmp <- strsplit(ccs$call_ID[x], split = "_")[[1]]
+  paste(tmp[4], tmp[5], sep = "_")
+})
+
+# change call_ID for better grepping later
+ccs$call_ID <- gsub(".WAV", "", ccs$call_ID)
+ccs$call_ID <- gsub("-", "_", ccs$call_ID)
+
+# repeated individual calls
+ccs_fi$call_ID <- paste(ccs_fi$sound.files, ccs_fi$selec, sep = "-")
+
+ccs_fi$site <- as.character(ccs_fi$site)
+
+```
+
+# General Approach
+
+Mantel tests encompassed 4 social scales, 2 geographic scales (regional: all sites across the transect and local: sites in the Colonia department) and 2 acoustic similarity methods. We encoded pairwise social group membership at each social scale by generating pairwise binary identity matrices (e.g. 1 = the same social group, 0 = different social groups). We converted acoustic similarity and binary identity matrices to distances matrices for Mantel tests by subtracting matrices from 1. 
+
+# Mantel Tests
+
+```{r echo = TRUE, eval = TRUE}
+
+path <- "/media/owner/MYIOPSITTA/R/Uruguay2017_MonkParakeet_CallAnalysis/Data/Site_Recordings"
+
+geo_dists <- readRDS(file.path(path, "geo_dists.RDS"))
+geo_distsC <- readRDS(file.path(path, "geo_distsC.RDS"))
+
+```
+
+```{r echo = TRUE, eval = FALSE}
+
+# cores for parallel processing
+cores <- parallel::detectCores() - 2
+
+# permutations for Mantel tests
+perms <- 9999
+
+# loop over call data sets
+call_data_set <- c("higher social scale", "Individual")
+
+# loop over acoustic similarity methods for the site call data set, these are the response matrices for Mantel tests
+acoustic_sim <- c("SPCC", "RF")
+
+# will convert these to distance matrices inside the loop, these matrices have a dimension name structure that is easier to parse
+response <- list(xc_mat, proxm_site)
+
+# loop over social scales for the site call data set
+# will create binary identity matrices per social scale within the loop to serve as predictors
+type <- c("Site", "Site - Colonia", "Flock", "Pair")
+
+# convert geographic distance matrices to km
+# these matrices will also serve as predictors
+geo_dists <- geo_dists/1000
+geo_distsC <- geo_distsC/1000
+
+# read in pair and flock IDs from Supplementary Methods 1
+pair_IDs <- readRDS(file.path(path, "pair_IDs.RDS"))
+length(pair_IDs)
+
+flock_IDs <- readRDS(file.path(path, "flock_IDs.RDS"))
+length(flock_IDs)
+
+# create an empty csv file that will be populated by appending Mantel test results
+file.remove(file.path(path, "Mantel_results.txt")) # remove previous versions
+
+invisible(pblapply(1:length(call_data_set), function(d){
+  
+  # split up Mantel tests by call data set
+  # higher social scale calls will be used for multiple tests at different social and geographic scales
+  if(call_data_set[d] == "Site-level"){
+    
+    # loop over acoustic similarity methods
+    lapply(1:length(acoustic_sim), function(a){
+      
+      # loop over test type (social or geographic scales) 
+      lapply(1:length(type), function(y){
+        
+          # cat(paste(d, a, y, "\n", sep = ""))
+        
+        # subset acoustic similarity response matrices and predictor matrices as needed, not necessary for site social and geographic scale
+        if(grepl("^Site$", type[y])){
+          
+          tmp <- ccs
+          
+          ####################################################
+          # Prep acoustic response matrix
+          resp <- response[[a]]
+          resp_tmp <- resp
+
+          # convert to a distance matrix
+          resp_tmp_dist <- stats::as.dist(1 - resp_tmp, diag = TRUE, upper = TRUE)
+          # dim(resp_tmp_dist)
+          
+          ####################################################
+          # Prep predictor matrix of site membership for Mantel tests
+          id_sites <- unlist(lapply(1:nrow(tmp), function(i){
+              return(as.numeric(tmp$General_site[i] == tmp$General_site))
+          }))
+           # str(id_sites)
+
+          id_sites_mat <- matrix(id_sites, nrow = nrow(tmp), ncol = nrow(tmp), dimnames = list(tmp$call_ID, tmp$call_ID))
+
+          id_sites_dist <- stats::as.dist(1 - id_sites_mat, diag = TRUE, upper = TRUE)
+          # str(id_sites_dist)
+            
+          ####################################################
+          # Run Mantel tests for site membership and geographic distance
+          mntl1 <- vegan::mantel(xdis = id_sites_dist, ydis = resp_tmp_dist, method = "pearson", permutations = perms, parallel = cores)
+            # str(mntl1)
+             
+          # create csv file for first Mantel iteration
+          if(acoustic_sim[a] == "SPCC"){
+            write.table(data.frame(social_scale = type[y], acoustic_similarity_method = acoustic_sim[a], geo_dist = "N", partial_Mantel = "N", num_calls = dim(id_sites_mat)[1], mantel_r = round(mntl1$statistic, digits = 2), mantel_p = mntl1$signif, permutations = perms), file = file.path(path, "Mantel_results.txt"), sep = ",", col.names = TRUE, quote = FALSE, row.names = FALSE)
+            
+          # if now on RF method, append results rather than writing a new csv
+          } else if(acoustic_sim[a] == "RF"){
+          write.table(data.frame(social_scale = type[y], acoustic_similarity_method = acoustic_sim[a], geo_dist = "N", partial_Mantel = "N", num_calls = dim(id_sites_mat)[1], mantel_r = round(mntl1$statistic, digits = 2), mantel_p = mntl1$signif, permutations = perms), file = file.path(path, "Mantel_results.txt"), sep = ",", col.names = FALSE, quote = FALSE, row.names = FALSE, append = TRUE)
+        }
+            
+          # give the geographic distance matrix unique dimension names
+          # dimnames(geo_dists) <- tmp$call_ID
+          attributes(geo_dists)$Labels <- tmp$call_ID
+          mntl2 <- vegan::mantel(xdis = geo_dists, ydis = resp_tmp_dist, method = "pearson", permutations = perms, parallel = cores)
+          # str(mntl2)
+              
+           write.table(data.frame(social_scale = type[y], acoustic_similarity_method = acoustic_sim[a], geo_dist = "Y", partial_Mantel = "N", num_calls = dim(id_sites_mat)[1], mantel_r = round(mntl2$statistic, digits = 2), mantel_p = mntl2$signif, permutations = perms), file = file.path(path, "Mantel_results.txt"), append = TRUE, sep = ",", col.names = FALSE, quote = FALSE, row.names = FALSE)
+  
+        }
+        
+        else if(!grepl("^Site$", type[y])){
+            
+         if(grepl("Colonia|Flock|Pair", type[y])){
+            
+            # initialize column for indexing call data set
+            if(type[y] == "Site - Colonia") col_nm <- "dept"
+            if(type[y] == "Flock") col_nm <- "Flock_ID"
+            if(type[y] == "Pair") col_nm <- "Pair_ID"
+            
+            # indices of calls for the given social scale in the higher social scale data set
+            if(grepl("Colonia", type[y])){
+              ss <- which(ccs[[col_nm]] == "Colonia")
+            } else if(grepl("Flock|Pair", type[y])){
+              
+              if(type[y] == "Pair"){
+                gids <- pair_IDs
+              } else if(type[y] == "Flock"){
+                gids <- flock_IDs
+              }
+    
+              ss <- grep(paste(paste("^", gids, "$", sep = ""), collapse = "|"), ccs[[col_nm]])
+
+            }
+             
+            # calls for pairs or flocks in the higher social scale data set
+            ss_calls <- ccs$call_ID[ss] 
+            
+            # subset call metadata 
+            tmp <- ccs[grep(paste(paste("^", ss_calls, "$", sep = ""), collapse = "|"), ccs$call_ID), ]
+            # unique(tmp$call_ID == ss_calls) # checking
+            
+            ####################################################
+            # Filter acoustic similarity response matrix for the given social scale and acoustic similarity method
+  # initialize response matrix depending on the current acoustic similarity method 
+            resp <- response[[a]]
+            length(dimnames(resp))
+
+            # reassign row and column names for parsing
+            dimnames(resp) <- list(ccs$call_ID, ccs$call_ID)
+
+            pat <- paste(paste("^", ss_calls, "$", sep = ""), collapse = "|")
+            # filter the response matrix by the calls of interest 
+            resp_tmp <- resp[grep(pat, dimnames(resp)[[1]]), grep(pat, dimnames(resp)[[2]])]
+            # str(resp_tmp)
+            
+            # convert to a distance matrix
+            resp_tmp_dist <- stats::as.dist(1 - resp_tmp, diag = TRUE, upper = TRUE)
+            # checking the filtering was performed correctly
+            # unique(dimnames(resp_tmp_dist) == ss_calls)
+            # unique(dimnames(resp_tmp_dist) == ss_calls)
+            # unique(dimnames(resp_tmp_dist) == tmp$call_ID)
+            # unique(dimnames(resp_tmp_dist) == tmp$call_ID)
+            
+            # cat(paste("Finished", type[y], "resp_tmp_dist", "\n", sep = " "))
+            
+            ####################################################
+            # Generate binary identity matrices of social group membership
+            
+            if(grepl("Colonia", type[y])){
+            
+              id <- unlist(lapply(1:nrow(tmp), function(i){
+                  return(as.numeric(tmp[["General_site"]][i] == tmp[["General_site"]]))
+              }))
+              
+              # give the geographic distance matrix unique dimension names
+              # dimnames(geo_distsC) <- tmp$call_ID
+              attributes(geo_distsC)$Labels <- tmp$call_ID
+              
+            } else if(grepl("Flock|Pair", type[y])){
+              
+              id <- unlist(lapply(1:nrow(tmp), function(i){
+                  return(id <- as.numeric(tmp[[col_nm]][i] == tmp[[col_nm]]))
+              }))
+            }
+            
+            # turn id vector into a matrix with the correct dimensions
+            id_mat <- matrix(id, nrow = nrow(tmp), ncol = nrow(tmp), dimnames = list(tmp$call_ID, tmp$call_ID))
+            # str(id_mat)
+
+            # convert this matrix to a distance matrix
+            id_dist <- stats::as.dist(1 - id_mat, diag = TRUE, upper = TRUE)
+            # str(id_dist)
+
+            ####################################################
+            # Run full Mantel tests for sites in Colonia
+            # Site membership and geographic distance
+            # Write out results as separate csv files
+            if(grepl("Colonia", type[y])){
+              mntl1 <- vegan::mantel(xdis = id_dist, ydis = resp_tmp_dist, method = "pearson", permutations = perms, parallel = cores)
+              
+              write.table(data.frame(social_scale = type[y], acoustic_similarity_method = acoustic_sim[a], geo_dist = "N", partial_Mantel = "N", num_calls = dim(id_mat)[1], mantel_r = round(mntl1$statistic, digits = 2), mantel_p = mntl1$signif, permutations = perms), file = file.path(path, "Mantel_results.txt"), append = TRUE, sep = ",", col.names = FALSE, quote = FALSE, row.names = FALSE)
+              
+              # first give the geo. dist. matrix unique dimnames
+              # dimnames(geo_distsC) <- tmp$call_ID
+              attributes(geo_distsC)$Labels <- tmp$call_ID
+              mntl2 <- vegan::mantel(xdis = geo_distsC, ydis = resp_tmp_dist, method = "pearson", permutations = perms, parallel = cores)
+              
+              write.table(data.frame(social_scale = type[y], acoustic_similarity_method = acoustic_sim[a], geo_dist = "Y", partial_Mantel = "N", num_calls = dim(id_mat)[1], mantel_r = round(mntl2$statistic, digits = 2), mantel_p = mntl2$signif, permutations = perms), file = file.path(path, "Mantel_results.txt"), append = TRUE, sep = ",", col.names = FALSE, quote = FALSE, row.names = FALSE)
+              
+              
+            } else if(grepl("Flock|Pair", type[y])){
+            
+            # make a site identity matrix for flock and pair calls 
+            # will serve as the third matrix in the partial Mantel
+            id_sites <- unlist(lapply(1:nrow(tmp), function(i){
+              return(as.numeric(tmp$General_site[i] == tmp$General_site))
+            }))
+            # str(id_sites)
+
+            id_sites_mat <- matrix(id_sites, nrow = nrow(tmp), ncol = nrow(tmp), dimnames = list(tmp$call_ID, tmp$call_ID))
+
+            id_sites_dist <- stats::as.dist(1 - id_sites_mat, diag = TRUE, upper = TRUE)
+            # str(id_sites_dist)
+            
+            ####################################################
+            # Run partial Mantel tests for flocks and pairs
+            # These scales are nested within sites
+            mntl <- vegan::mantel.partial(xdis = id_dist, ydis = resp_tmp_dist, zdis = id_sites_dist, method = "pearson", permutations = perms, parallel = cores)
+            
+            write.table(data.frame(social_scale = type[y], acoustic_similarity_method = acoustic_sim[a], geo_dist = "N", partial_Mantel = "Y", num_calls = dim(id_mat)[1], mantel_r = round(mntl$statistic, digits = 2), mantel_p = mntl$signif, permutations = perms), file = file.path(path, "Mantel_results.txt"), append = TRUE, sep = ",", col.names = FALSE, quote = FALSE, row.names = FALSE)
+              
+            }
+            
+          } 
+        } 
+    })
+  })
+} else if(call_data_set[d] == "Individual"){
+    
+    ####################################################
+    # acoustic response matrix (SPCC) generated previously, as were coordinates for site-pair table
+    tmp <- ccs_fi
+    resp_tmp <- xc_mat_fi
+    # str(resp_tmp)
+    
+    # convert to a distance matrix
+    resp_tmp_dist <- stats::as.dist(1 - resp_tmp, diag = TRUE, upper = TRUE)
+    
+    ####################################################
+    # Make matrices of individual and site identity (individuals are nested within sites), prep for Mantel tests
+    id <- unlist(lapply(1:nrow(tmp), function(i){
+      return(as.numeric(tmp$indiv[i] == tmp$indiv))
+    }))
+
+    id_mat <- matrix(id, nrow = nrow(tmp), ncol = nrow(tmp), dimnames = list(tmp$call_ID, tmp$call_ID))
+    # id_mat
+
+    id_dist <- stats::as.dist(1 - id_mat, diag = TRUE, upper = TRUE)
+    
+    id_sites <- unlist(lapply(1:nrow(tmp), function(i){
+      return(as.numeric(tmp$site[i] == tmp$site))
+    }))
+    # str(id_sites)
+
+    id_sites_mat <- matrix(id_sites, nrow = nrow(tmp), ncol = nrow(tmp), dimnames = list(tmp$call_ID, tmp$call_ID))
+
+    id_sites_dist <- stats::as.dist(1 - id_sites_mat, diag = TRUE, upper = TRUE)
+    # str(id_sites_dist)
+    
+    ####################################################
+    # Run Mantel test
+    mntl <- vegan::mantel.partial(xdis = id_dist, ydis = resp_tmp_dist, zdis = id_sites_dist, method = "pearson", permutations = perms, parallel = cores)
+    # str(mntl)
+              
+    write.table(data.frame(social_scale = call_data_set[d], acoustic_similarity_method = "SPCC", geo_dist = "N", partial_Mantel = "Y", num_calls = dim(id_mat)[1], mantel_r = round(mntl$statistic, digits = 2), mantel_p = mntl$signif, permutations = perms), file = file.path(path, "Mantel_results.txt"), append = TRUE, sep = ",", col.names = FALSE, quote = FALSE, row.names = FALSE)
+
+  }
+  
+}))
+
+```
+
+Read in Mantel results and perform Bonferroni p-value correction for multiple comparisons. 
+```{r echo = TRUE, eval = FALSE}
+
+mantel_res <- read.table(file.path(path, "Mantel_results.txt"), sep = ",", header = TRUE)
+str(mantel_res)
+
+# write this out as a .csv
+write.csv(mantel_res, file.path(path, "Mantel_results.csv"), row.names = FALSE)
+
+```
+
+```{r echo = TRUE, eval = TRUE}
+
+mantel_res <- read.csv(file.path(path, "Mantel_results.csv"), header = TRUE)
+
+# the total number of comparisons for Mantel tests:
+nrow(mantel_res)
+
+# the adjusted alpha by a Bonferroni correction:
+alpha <- 0.05
+
+adj_alpha <- round(alpha/nrow(mantel_res), digits = 4)
+adj_alpha
+
+```
+
+See Table II in the main body of the article for Mantel test results.
+
+# Spatial Autocorrelation
+
+We used Mantel-based spatial autocorrelation to further evaluate the relationship between contact call similarity and geographic distance. In an individual recongition system, individuals at geographically distant sites might converge on similar calls, as their chances of social interaction would be quite low. Spatial autocorrelation could therefore provide insight not only about the nature of the relationship between call similarity and geographic distance, but also the minimum distance at which calls became more similar or different than expected. 
+```{r echo = TRUE, eval = TRUE}
+
+geo_dists <- readRDS(file.path(path, "geo_dists.RDS"))
+geo_distsC <- readRDS(file.path(path, "geo_distsC.RDS"))
+
+```
+
+## Regional Scale
+
+```{r echo = TRUE, eval = TRUE}
+
+# recalculate geographic distance matrix among all site calls
+tmp <- data.frame(lat = ccs$lat, lon = ccs$lon, site = ccs$General_site)
+geo_dists <- round(geo_dists/1000) # convert to km and round values to integers
+
+# find meaningful breaks in the geographic distance matrix
+geo_vect <- geo_dists[lower.tri(geo_dists)]
+geo_vect <- geo_vect[geo_vect != 1 & !is.na(geo_vect)]
+range(geo_vect)
+
+# various classes have 0 observations with a break interval of 5km
+geo_classes <- cut(geo_vect, breaks = seq(0, round(max(geo_vect)), 5))
+table(geo_classes)
+
+# only 2 classes have 0 observations with a break interval of 10km
+geo_classes <- cut(geo_vect, breaks = seq(0, round(max(geo_vect)), 10))
+table(geo_classes)
+dim(table(geo_classes))
+
+# no classes have 0 observations with a break interval of 25km
+geo_classes <- cut(geo_vect, breaks = seq(0, round(max(geo_vect)), 25))
+table(geo_classes)
+
+# choose a break value and define geographic distance classes for correlogram
+classes <- seq(0, max(geo_dists), 10)
+length(classes)
+
+```
+
+```{r echo = TRUE, eval = FALSE}
+
+# Mantel's correlation using Pearson's method
+correl_SPCC_10km <- vegan::mantel.correlog(D.eco = xc_dist, D.geo = geo_dists, break.pts = classes, cutoff = FALSE, r.type = "pearson", nperm = 999, mult = "holm", progressive = TRUE)
+str(correl_SPCC_10km)
+
+saveRDS(correl_SPCC_10km, file.path(path, "correl_SPCC_10km.RDS"))
+
+correl_RF_10km <- vegan::mantel.correlog(D.eco = rf_dist, D.geo = geo_dists, break.pts = classes, cutoff = FALSE, r.type = "pearson", nperm = 999, mult = "holm", progressive = TRUE)
+str(correl_RF_10km)
+
+saveRDS(correl_RF_10km, file.path(path, "correl_RF_10km.RDS"))
+
+```
+
+## Local Scale
+
+We repeated this analysis over a local geographic scale (Colonia department)
+```{r echo = TRUE, eval = TRUE}
+
+# Colonia sites
+Colonia <- ccs[grep("Colonia", ccs$dept), ]
+tmp <- data.frame(lat = Colonia$lat, lon = Colonia$lon, site = Colonia$General_site)
+
+# convert to km and round values to integers
+geo_distsC <- round(geo_distsC/1000) 
+
+# find meaningful breaks in the geographic distance matrix
+geo_vect <- geo_distsC[lower.tri(geo_distsC)]
+geo_vect <- geo_vect[geo_vect != 1 & !is.na(geo_vect)]
+range(geo_vect)
+
+# 9 classes have 0 observations with a break interval of 2km
+geo_classes <- cut(geo_vect, breaks = seq(0, round(max(geo_vect)), 2))
+table(geo_classes)
+
+# only 2 classes have 0 observations with a break interval of 5km
+geo_classes <- cut(geo_vect, breaks = seq(0, round(max(geo_vect)), 5))
+table(geo_classes)
+
+# subset SPCC matrix by Colonia calls
+xc_mat_Col <- xc_mat
+dimnames(xc_mat_Col) <- list(as.character(ccs$dept), as.character(ccs$dept))
+indices <- grep("^Colonia$", dimnames(xc_mat_Col)[[1]])
+xc_mat_Col <- xc_mat_Col[indices, indices]
+dim(xc_mat_Col)
+
+# repeat for RF matrix
+proxm_site_Col <- proxm_site
+dimnames(proxm_site_Col) <- list(as.character(ccs$dept), as.character(ccs$dept))
+indices <- grep("^Colonia$", dimnames(proxm_site_Col)[[1]])
+proxm_site_Col <- proxm_site_Col[indices, indices]
+dim(proxm_site_Col)
+
+# convert both to distance matrices
+xc_dist_Col <- stats::as.dist(1 - xc_mat_Col, upper = TRUE, diag = TRUE)
+rf_dist_Col <- stats::as.dist(1 - proxm_site_Col, upper = TRUE, diag = TRUE)
+
+# proceeding with classes at 2km intervals, since native range colonies are quite often within 2km 
+classes <- seq(0, max(geo_distsC), 2)
+length(classes)
+
+```
+
+```{r echo = TRUE, eval = FALSE}
+
+# Mantel's correlation using Pearson's method
+correl_SPCC_Col_2km <- vegan::mantel.correlog(D.eco = xc_dist_Col, D.geo = geo_distsC, break.pts = classes, cutoff = FALSE, r.type = "pearson", nperm = 999, mult = "holm", progressive = TRUE)
+str(correl_SPCC_Col_2km)
+saveRDS(correl_SPCC_Col_2km, file.path(path, "correl_SPCC_Col_2km.RDS"))
+
+correl_RF_Col_2km <- vegan::mantel.correlog(D.eco = rf_dist_Col, D.geo = geo_distsC, break.pts = classes, cutoff = FALSE, r.type = "pearson", nperm = 999, mult = "holm", progressive = TRUE)
+str(correl_RF_Col_2km)
+saveRDS(correl_RF_Col_2km, file.path(path, "correl_RF_Col_2km.RDS"))
+
+```
+
+```{r echo = TRUE, eval = TRUE}
+
+path <- "/media/owner/MYIOPSITTA/R/Uruguay2017_MonkParakeet_CallAnalysis/Data/Site_Recordings/"
+
+geo_dists <- readRDS(file.path(path, "geo_dists.RDS"))
+geo_distsC <- readRDS(file.path(path, "geo_distsC.RDS"))
+
+geo_dists <- geo_dists/1000
+geo_distsC <- geo_distsC/1000
+
+correl_SPCC_Col_2km <- readRDS(file.path(path, "correl_SPCC_Col_2km.RDS"))
+correl_RF_Col_2km <- readRDS(file.path(path, "correl_RF_Col_2km.RDS"))
+
+correl_SPCC_10km <- readRDS(file.path(path, "correl_SPCC_10km.RDS"))
+correl_RF_10km <- readRDS(file.path(path, "correl_RF_10km.RDS"))
+
+```
+
+#### Figure 4: Mantel-based Correlogram
+
+This is Figure 4 in the main manuscript. 
+```{r echo = TRUE, eval = TRUE, dpi = 200, fig.width = 7, fig.height = 5}
+
+# make a data frame per acoustic similarity method and geographic scale
+df1 <- as.data.frame(correl_SPCC_10km$mantel.res)
+df2 <- as.data.frame(correl_RF_10km$mantel.res)
+df3 <- as.data.frame(correl_SPCC_Col_2km$mantel.res)
+df4 <- as.data.frame(correl_RF_Col_2km$mantel.res)
+
+# remove NAs in corrected p-values (distance classes that had 0 or too few observations)
+df1 <- df1[!is.na(df1$`Pr(corrected)`), ]
+df2 <- df2[!is.na(df2$`Pr(corrected)`), ]
+df3 <- df3[!is.na(df3$`Pr(corrected)`), ]
+df4 <- df4[!is.na(df4$`Pr(corrected)`), ]
+
+# combine distance classes
+distance <- c(df1$class.index, df2$class.index, df3$class.index, df4$class.index)
+
+# combine Mantel correlation values
+corr <- c(df1$Mantel.cor, df2$Mantel.cor, df3$Mantel.cor, df4$Mantel.cor)
+
+# combine corrected p-values
+p_val <- c(df1$`Pr(corrected)`, df2$`Pr(corrected)`, df3$`Pr(corrected)`, df4$`Pr(corrected)`)
+
+# make a vector of significance for plotting
+sig <- c(ifelse(df1$`Pr(corrected)` <= 0.05, "sig", "non-sig"), ifelse(df2$`Pr(corrected)` <= 0.05, "sig", "non-sig"), ifelse(df3$`Pr(corrected)` <= 0.05, "sig", "non-sig"), ifelse(df4$`Pr(corrected)` <= 0.05, "sig", "non-sig"))
+
+# use the vector of statistical significance together with Mantel correlation values to make a new vector of acoustic similarity as: 1) less than expected, 2) neutral and 3) higher than expected
+sig_cat <- sig
+sig_cat[sig_cat == "sig" & corr < 0] <- "Lower"
+sig_cat[sig_cat == "sig" & corr > 0] <- "Higher"
+sig_cat[sig_cat == "non-sig"] <- "Neutral"
+unique(sig_cat)
+
+# acoustic similarity method
+type <- c(rep("SPCC", nrow(df1)), rep("Random_Forests", nrow(df2)), rep("SPCC", nrow(df3)), rep("Random_Forests", nrow(df4)))
+
+# geographic scale
+geo_scale <- c(rep("Regional", nrow(df1)), rep("Regional", nrow(df2)), rep("Local", nrow(df3)), rep("Local", nrow(df4)))
+
+# combine variables for ggplotting
+corr_df <- data.frame(distance = distance, corr = corr, p_val = p_val, sig = sig, sig_cat = sig_cat, type = type, geo_scale = geo_scale)
+
+# organize factor levels as desired for plotting
+corr_df$type <- factor(corr_df$type, levels = c("SPCC", "Random_Forests"))
+corr_df$geo_scale <- factor(corr_df$geo_scale, levels = c("Local", "Regional"))
+corr_df$sig <- factor(corr_df$sig, levels = c("sig", "non-sig"))
+corr_df$sig_cat <- factor(corr_df$sig_cat, levels = c("Lower", "Neutral", "Higher"))
+
+# intitialize x-axis scales for facetscales::facet_grid_sc
+scales_x <- list(
+    Local = scale_x_continuous(limits = c(0, 22), breaks = seq(0, 22, 2), labels = seq(0, 22, 2)),
+    
+  Regional = scale_x_continuous(limits = c(0, 470), breaks = seq(0, 470, 40), labels = seq(0, 470, 40))
+)
+
+# intitialize y-axis scales for facetscales::facet_grid_sc
+scales_y <- list(
+  SPCC = scale_y_continuous(limits = c(-0.16, 0.16)),
+  
+  Random_Forests = scale_y_continuous(limits = c(-0.16, 0.16))
+)
+
+ggplot(corr_df, aes(x = distance, y = corr)) +
+  
+  geom_hline(yintercept = 0, linetype = "dotted", size = 0.5) +
+  
+  geom_point(aes(color = sig_cat, fill = sig_cat), size = 1.75, shape = 21) +
+  
+  # scale_color_manual(values = c(alpha("darkblue", 0.6), gray.colors(12)[6], "red"), labels = c("Lower", expression("p "*">"*" 0.05"), "Higher")) +
+
+  scale_color_manual(values = c(alpha("darkblue", 0.6), gray.colors(12)[6], "red")) +
+  
+  scale_fill_manual(values = c(alpha("darkblue", 0.6), gray.colors(12)[6], "red")) +
+  
+  geom_line(colour = "black", size = 0.25) +
+  
+  facetscales::facet_grid_sc(cols = vars(geo_scale), rows = vars(type), scales = list(x = scales_x, y = scales_y)) +
+
+  theme_bw() +
+  
+  theme(panel.background = element_rect(color = "white", fill = "white"), panel.grid.major.x = element_line(size = 0.1, color = "black"), axis.line = element_line(color = "black", size = 0.35), axis.text.x = element_text(size = 6, angle = 0, face = "bold"), axis.title = element_text(size = 10), axis.ticks = element_line(size = 0.15), legend.text = element_text(hjust = 0, size = 10), legend.title = element_text(hjust = 0, size = 10), panel.grid.major.y = element_blank(), panel.grid.minor.y = element_blank(), legend.position = "top", strip.text = element_text(size = 10)) +
+  
+  xlab("Pairwise Geographic Distance (km)") + ylab("Mantel Spatial Correlation of Acoustic Similarity") + 
+  
+  guides(fill = guide_legend(title = "Spatial Correlation Values"), color = guide_legend(title = "Spatial Correlation Values"))
+
+# ggsave(file.path(path, "Figure4_Mantel_correlogram.tiff"), width = 5.00, height = 4.5, units = "in", dpi = 325)
+
+```
+
+Which distance classes were significant for SPCC at the regional and local scales?
+```{r echo = TRUE, eval = TRUE}
+
+# subtract 5 from the minimum distance and add 5 to the maximum distance to get the full interval of distances (binned by 10km)
+# here these bins encompass 60 - 80km
+corr_df %>% 
+  filter(sig_cat == "Lower" & type == "SPCC" & geo_scale == "Regional")
+
+corr_df %>% 
+  filter(sig_cat == "Higher" & type == "SPCC" & geo_scale == "Local")
+corr_df %>% 
+  filter(sig_cat == "Lower" & type == "SPCC" & geo_scale == "Local")
+
+```
+
+Which distance classes were significant for RF at the regional and local scales?
+```{r echo = TRUE, eval = TRUE}
+
+# the first set of bins encompasses 60 - 110km
+corr_df %>% 
+  filter(sig_cat == "Lower" & type == "Random_Forests" & geo_scale == "Regional")
+
+corr_df %>% 
+  filter(sig_cat == "Higher" & type == "Random_Forests" & geo_scale == "Local")
+
+corr_df %>% 
+  filter(sig_cat == "Lower" & type == "Random_Forests" & geo_scale == "Local")
+
+```
+
+# References
+
+    1. Mantel, N. (1967). The detection of disease clustering and a generalized regression approach. Cancer Research, 27(2), 209–220.
